@@ -1,0 +1,3 @@
+# Python package dependencies - List all required packages with their versions here
+# Install these packages using: pip install -r requirements.txt
+
