@@ -1,3 +1,22 @@
 <!-- Login page template - Create the user login form with email/username and password fields here -->
 <!-- This template should extend base.html and include form validation and error handling -->
+{% extends "base.html" %}
 
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Login</h2>
+
+    <form method="POST">
+        <input type="email" name="email" placeholder="Email" required>
+        <input type="password" name="password" placeholder="Password" required>
+
+        <button type="submit">Login</button>
+    </form>
+
+    <p class="switch">
+        Don’t have an account? <a href="/register">Register</a>
+    </p>
+</div>
+{% endblock %}
