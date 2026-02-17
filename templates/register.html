@@ -1,3 +1,23 @@
 <!-- Registration page template - Create the user registration form with fields like name, email, password here -->
 <!-- This template should extend base.html and include form validation and error handling -->
+{% extends "base.html" %}
 
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Register</h2>
+
+    <form method="POST">
+        <input type="text" name="name" placeholder="Full Name" required>
+        <input type="email" name="email" placeholder="Email" required>
+        <input type="password" name="password" placeholder="Password" required>
+
+        <button type="submit">Register</button>
+    </form>
+
+    <p class="switch">
+        Already have an account? <a href="/login">Login</a>
+    </p>
+</div>
+{% endblock %}
