@@ -1,72 +1,86 @@
-# Main Flask application file - Define routes, views, and application logic here
-# This file initializes the Flask app and handles all HTTP requests/responses
-from flask import Flask, render_template, request, redirect, session
-from pymongo import MongoClient
-from werkzeug.security import generate_password_hash, check_password_hash
-import config
+/* Main stylesheet for the application - Add CSS styles for layout, colors, fonts, and responsive design here */
+* {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+}
 
-app = Flask(__name__)
-app.secret_key = config.SECRET_KEY
+body {
+    margin: 0;
+    background: #f4f6f8;
+}
 
-# MongoDB connection
-client = MongoClient(config.MONGO_URI)
-db = client[config.DB_NAME]
-users = db.users
+/* Navbar */
+.navbar {
+    background: #1e293b;
+    color: white;
+    padding: 15px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
+.navbar a {
+    color: white;
+    text-decoration: none;
+    margin-left: 15px;
+    font-weight: 500;
+}
 
-@app.route("/")
-def home():
-    if "user" in session:
-        return f"Welcome {session['user']}"
-    return redirect("/login")
+.navbar a:hover {
+    text-decoration: underline;
+}
 
+/* Main container */
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: calc(100vh - 70px);
+}
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        name = request.form["name"]
-        email = request.form["email"]
-        password = request.form["password"]
+/* Card */
+.card {
+    background: white;
+    padding: 30px;
+    width: 350px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
 
-        # Check if user already exists
-        if users.find_one({"email": email}):
-            return "User already exists"
+.card h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
 
-        hashed_password = generate_password_hash(password)
+.card input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
 
-        users.insert_one({
-            "name": name,
-            "email": email,
-            "password": hashed_password
-        })
+.card button {
+    width: 100%;
+    padding: 10px;
+    background: #2563eb;
+    border: none;
+    color: white;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
 
-        return redirect("/login")
+.card button:hover {
+    background: #1e40af;
+}
 
-    return render_template("register.html")
+.switch {
+    text-align: center;
+    margin-top: 15px;
+}
 
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
-
-        user = users.find_one({"email": email})
-
-        if user and check_password_hash(user["password"], password):
-            session["user"] = user["name"]
-            return redirect("/")
-        else:
-            return "Invalid email or password"
-
-    return render_template("login.html")
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/login")
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
+.switch a {
+    color: #2563eb;
+    text-decoration: none;
+}
