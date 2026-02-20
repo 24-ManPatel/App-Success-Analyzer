@@ -1,6 +1,6 @@
 # Main Flask application file - Define routes, views, and application logic here
 # This file initializes the Flask app and handles all HTTP requests/responses
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, session, flash
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import config
@@ -17,7 +17,7 @@ users = db.users
 @app.route("/")
 def home():
     if "user" in session:
-        return f"Welcome {session['user']}"
+        return render_template("home.html")
     return redirect("/login")
 
 
@@ -30,7 +30,7 @@ def register():
 
         # Check if user already exists
         if users.find_one({"email": email}):
-            return "User already exists"
+            return render_template("register.html", error="User with this email already exists. Please try logging in instead.")
 
         hashed_password = generate_password_hash(password)
 
@@ -57,9 +57,16 @@ def login():
             session["user"] = user["name"]
             return redirect("/")
         else:
-            return "Invalid email or password"
+            return render_template("login.html", error="Invalid email or password. Please try again.")
 
     return render_template("login.html")
+
+
+@app.route("/dashboard")
+def dashboard():
+    if "user" in session:
+        return render_template("dashboard.html")
+    return redirect("/login")
 
 
 @app.route("/logout")

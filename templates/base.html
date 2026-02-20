@@ -4,20 +4,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}App Success Analyzer{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen">
 
-    <nav class="navbar">
-        <h2>App Success Analyzer</h2>
-        <div>
-            <a href="/login">Login</a>
-            <a href="/register">Register</a>
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <h2 class="text-xl font-bold text-gray-800">App Success Analyzer</h2>
+                <div class="flex items-center space-x-4">
+                    {% if session.user %}
+                        <a href="/" class="text-gray-700 hover:text-gray-900 font-medium transition-colors">Home</a>
+                        <a href="/dashboard" class="text-blue-600 hover:text-blue-800 font-medium transition-colors">Dashboard</a>
+                        <span class="text-gray-700">Welcome, {{ session.user }}</span>
+                        <a href="/logout" class="text-red-600 hover:text-red-800 font-medium transition-colors">Logout</a>
+                    {% else %}
+                        <a href="/login" class="text-gray-700 hover:text-gray-900 font-medium transition-colors">Login</a>
+                        <a href="/register" class="text-blue-600 hover:text-blue-800 font-medium transition-colors">Register</a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </nav>
 
-    <div class="container">
+    <div class="min-h-screen">
         {% block content %}{% endblock %}
     </div>
 
