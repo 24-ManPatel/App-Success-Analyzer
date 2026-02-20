@@ -1,3 +1,25 @@
 <!-- Base HTML template - Define the common layout structure (header, footer, navigation) that other pages will extend -->
 <!-- Other templates should extend this file using Jinja2 template inheritance -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}App Success Analyzer{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
 
+    <nav class="navbar">
+        <h2>App Success Analyzer</h2>
+        <div>
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+</body>
+</html>
