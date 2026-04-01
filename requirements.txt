@@ -3,3 +3,5 @@ pymongo
 dnspython
 werkzeug
 PyJWT
+python-dotenv
+sendgrid

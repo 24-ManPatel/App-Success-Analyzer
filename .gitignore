@@ -1,0 +1,10 @@
+# Environment variables — NEVER commit this file
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Distribution / build
+.dist/
