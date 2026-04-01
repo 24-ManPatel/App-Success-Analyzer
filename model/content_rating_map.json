@@ -1,0 +1,8 @@
+{
+  "Adults only 18+": 0,
+  "Everyone": 1,
+  "Everyone 10+": 2,
+  "Mature 17+": 3,
+  "Teen": 4,
+  "Unrated": 5
+}

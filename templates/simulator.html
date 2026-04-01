@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}What-If Simulator{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb"><a href="/">Home</a><span>›</span>Simulator</div>
+    <h1>What-If Simulator</h1>
+    <p>Adjust the controls below — predictions update live as you change any value.</p>
+</div>
+
+<div class="two-col">
+
+    <!-- LEFT: Controls -->
+    <div class="card">
+        <div class="card-title">Configure Your App</div>
+
+        <div class="form-group">
+            <label>Category</label>
+            <select id="category">
+                {% for cat in categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>App Type</label>
+            <select id="is_free">
+                <option value="1">Free</option>
+                <option value="0">Paid</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Content Rating</label>
+            <select id="content_rating">
+                {% for cr in content_ratings %}<option value="{{ cr }}">{{ cr }}</option>{% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Primary Genre</label>
+            <select id="primary_genre">
+                {% for pg in primary_genres %}<option value="{{ pg }}">{{ pg }}</option>{% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>Number of Reviews</label><span class="slider-val" id="reviews_display">10,000</span></div>
+            <input type="range" id="reviews" min="0" max="5000000" step="1000" value="10000">
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>Installs</label><span class="slider-val" id="installs_display">100K</span></div>
+            <input type="range" id="installs" min="0" max="1000000000" step="100000" value="100000">
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>App Size (MB)</label><span class="slider-val" id="size_mb_display">25 MB</span></div>
+            <input type="range" id="size_mb" min="1" max="500" step="1" value="25">
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>Price (USD)</label><span class="slider-val" id="price_display">$0.00</span></div>
+            <input type="range" id="price" min="0" max="50" step="0.99" value="0" disabled>
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>Days Since Last Update</label><span class="slider-val" id="days_since_update_display">90 days</span></div>
+            <input type="range" id="days_since_update" min="0" max="1000" step="10" value="90">
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>Min Android Version</label><span class="slider-val" id="min_android_ver_display">4.0</span></div>
+            <input type="range" id="min_android_ver" min="1" max="10" step="0.1" value="4.0">
+        </div>
+    </div>
+
+    <!-- RIGHT: Live Results -->
+    <div style="display:flex;flex-direction:column;gap:1.25rem;">
+
+        <!-- Prediction badge -->
+        <div class="card" style="text-align:center;">
+            <div class="card-title">Live Prediction</div>
+            <div id="label_badge" class="badge-anim lbl-poor" style="margin-bottom:1rem;">—</div>
+            <p id="confidence_text" style="color:var(--muted);margin:0 0 0.875rem;font-size:0.9rem;">Waiting for prediction...</p>
+            <div class="progress-track">
+                <div id="confidence_bar" class="progress-fill poor" style="width:0%"></div>
+            </div>
+        </div>
+
+        <!-- Probability chart -->
+        <div class="card">
+            <div class="card-title">Probability Breakdown</div>
+            <canvas id="probChart" height="130"></canvas>
+        </div>
+
+        <!-- Key drivers -->
+        <div class="card" id="drivers_card" style="display:none;">
+            <div class="card-title">Key Drivers</div>
+            <p id="drivers_text" style="color:var(--muted);font-size:0.875rem;margin:0;"></p>
+        </div>
+
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    function formatNumber(n) {
+        n = parseInt(n);
+        if (n >= 1e9) return (n/1e9).toFixed(0)+'B';
+        if (n >= 1e6) return (n/1e6).toFixed(0)+'M';
+        if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+        return n.toString();
+    }
+    function debounce(fn, d) { let t; return function(...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this,a), d); }; }
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg || 'Prediction error.';
+        t.style.opacity = '1';
+        setTimeout(() => { t.style.opacity = '0'; }, 3000);
+    }
+
+    document.getElementById('reviews').addEventListener('input', function() { document.getElementById('reviews_display').textContent = parseInt(this.value).toLocaleString(); });
+    document.getElementById('installs').addEventListener('input', function() { document.getElementById('installs_display').textContent = formatNumber(this.value); });
+    document.getElementById('size_mb').addEventListener('input', function() { document.getElementById('size_mb_display').textContent = this.value+' MB'; });
+    document.getElementById('price').addEventListener('input', function() { document.getElementById('price_display').textContent = '$'+parseFloat(this.value).toFixed(2); });
+    document.getElementById('days_since_update').addEventListener('input', function() { document.getElementById('days_since_update_display').textContent = this.value+' days'; });
+    document.getElementById('min_android_ver').addEventListener('input', function() { document.getElementById('min_android_ver_display').textContent = parseFloat(this.value).toFixed(1); });
+
+    document.getElementById('is_free').addEventListener('change', function() {
+        const s = document.getElementById('price');
+        if (this.value === '0') { s.disabled = false; }
+        else { s.disabled = true; s.value = 0; document.getElementById('price_display').textContent = '$0.00'; }
+    });
+
+    const ctx = document.getElementById('probChart').getContext('2d');
+    const probChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: ['Poor','Average','Good'], datasets: [{ data: [0,0,0], backgroundColor: ['#ef4444','#f59e0b','#22c55e'], borderRadius: 6 }] },
+        options: {
+            indexAxis: 'y', responsive: true,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => (c.parsed.x*100).toFixed(1)+'%' } } },
+            scales: { x: { min:0, max:1, ticks: { color:'#94a3b8', callback: v => (v*100).toFixed(0)+'%' }, grid: { color:'#334155' } }, y: { ticks: { color:'#94a3b8' }, grid: { display:false } } }
+        }
+    });
+
+    const TOP_DRIVERS = ['Install Count', 'Number of Reviews', 'Category'];
+
+    function getPayload() {
+        const isFree = document.getElementById('is_free').value;
+        return {
+            category: document.getElementById('category').value,
+            reviews: document.getElementById('reviews').value,
+            installs: document.getElementById('installs').value,
+            size_mb: document.getElementById('size_mb').value,
+            is_free: isFree,
+            price: isFree === '1' ? '0' : document.getElementById('price').value,
+            content_rating: document.getElementById('content_rating').value,
+            primary_genre: document.getElementById('primary_genre').value,
+            days_since_update: document.getElementById('days_since_update').value,
+            min_android_ver: parseFloat(document.getElementById('min_android_ver').value).toFixed(1),
+        };
+    }
+
+    function updateUI(r) {
+        const badge = document.getElementById('label_badge');
+        badge.textContent = r.label.toUpperCase();
+        badge.className = 'badge-anim ' + (r.label==='Good' ? 'lbl-good' : r.label==='Average' ? 'lbl-average' : 'lbl-poor');
+
+        document.getElementById('confidence_text').textContent = r.confidence.toFixed(1)+'% confident this app will be '+r.label;
+
+        const bar = document.getElementById('confidence_bar');
+        bar.style.width = r.confidence.toFixed(1)+'%';
+        bar.className = 'progress-fill ' + (r.label==='Good' ? 'good' : r.label==='Average' ? 'average' : 'poor');
+
+        probChart.data.datasets[0].data = [r.probabilities.Poor, r.probabilities.Average, r.probabilities.Good];
+        probChart.update();
+
+        const dc = document.getElementById('drivers_card');
+        dc.style.display = '';
+        document.getElementById('drivers_text').textContent = 'This prediction is most influenced by: '+TOP_DRIVERS.join(', ');
+    }
+
+    const debouncedPredict = debounce(function() {
+        fetch('/api/predict', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(getPayload()) })
+        .then(r => r.json())
+        .then(d => { if (d.error) { showToast(d.error); return; } updateUI(d); })
+        .catch(() => showToast('Network error.'));
+    }, 300);
+
+    ['category','is_free','content_rating','primary_genre','reviews','installs','size_mb','price','days_since_update','min_android_ver'].forEach(id => {
+        document.getElementById(id).addEventListener('input', debouncedPredict);
+        document.getElementById(id).addEventListener('change', debouncedPredict);
+    });
+
+    debouncedPredict();
+</script>
+{% endblock %}

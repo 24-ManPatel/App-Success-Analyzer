@@ -3,3 +3,7 @@ pymongo
 dnspython
 werkzeug
 PyJWT
+xgboost
+scikit-learn
+joblib
+numpy

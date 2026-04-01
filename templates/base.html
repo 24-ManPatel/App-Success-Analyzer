@@ -1,35 +1,45 @@
-<!-- Base HTML template - Define the common layout structure (header, footer, navigation) that other pages will extend -->
-<!-- Other templates should extend this file using Jinja2 template inheritance -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}App Success Analyzer{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body>
 
-    <nav class="bg-white shadow-sm border-b border-gray-200">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <h2 class="text-xl font-bold text-gray-800">App Success Analyzer</h2>
-                <div class="flex items-center space-x-4">
-                    {% if session.user %}
-                        <a href="/" class="text-gray-700 hover:text-gray-900 font-medium transition-colors">Home</a>
-                        <a href="/dashboard" class="text-blue-600 hover:text-blue-800 font-medium transition-colors">Dashboard</a>
-                        <span class="text-gray-700">Welcome, {{ session.user }}</span>
-                        <a href="/logout" class="text-red-600 hover:text-red-800 font-medium transition-colors">Logout</a>
-                    {% else %}
-                        <a href="/login" class="text-gray-700 hover:text-gray-900 font-medium transition-colors">Login</a>
-                        <a href="/register" class="text-blue-600 hover:text-blue-800 font-medium transition-colors">Register</a>
-                    {% endif %}
-                </div>
-            </div>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">App Success Analyzer</a>
+        <div class="navbar-links">
+            {% if request.cookies.get('jwt_token') %}
+                <a href="/"          class="nav-link {{ 'active' if request.path == '/' }}">Home</a>
+                <a href="/dashboard" class="nav-link {{ 'active' if request.path == '/dashboard' }}">Dashboard</a>
+                <a href="/predictor" class="nav-link {{ 'active' if request.path == '/predictor' }}">Predictor</a>
+                <a href="/simulator" class="nav-link {{ 'active' if request.path == '/simulator' }}">Simulator</a>
+                <a href="/insights"  class="nav-link {{ 'active' if request.path == '/insights' }}">Insights</a>
+                <a href="/compare"   class="nav-link {{ 'active' if request.path == '/compare' }}">Compare</a>
+                <a href="/logout"    class="nav-link danger">Logout</a>
+            {% else %}
+                <a href="/login"    class="nav-link {{ 'active' if request.path == '/login' }}">Login</a>
+                <a href="/register" class="nav-link {{ 'active' if request.path == '/register' }}">Register</a>
+            {% endif %}
         </div>
     </nav>
 
-    <div class="min-h-screen">
+    <div class="page-content">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for msg in messages %}
+                        <div class="flash-msg">{{ msg }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </div>
 

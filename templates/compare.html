@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% block title %}App Scenario Comparison{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb"><a href="/">Home</a><span>›</span>Compare</div>
+    <h1>App Scenario Comparison</h1>
+    <p>Build up to 3 app configurations and compare their predicted success.</p>
+</div>
+
+<!-- Action buttons -->
+<div style="display:flex;gap:0.75rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <button id="add-btn" onclick="addScenario()" class="btn-secondary">+ Add Scenario</button>
+    <button id="compare-btn" onclick="runComparison()" class="btn-primary green" style="display:flex;align-items:center;gap:0.5rem;">
+        <span id="compare-btn-text">Compare All</span>
+        <svg id="compare-spinner" style="display:none;animation:spin 1s linear infinite;width:16px;height:16px;" fill="none" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"></circle>
+            <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+    </button>
+</div>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+<!-- Scenario cards -->
+<div id="scenarios-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.25rem;margin-bottom:1.5rem;"></div>
+
+<!-- Results -->
+<div id="results-section" style="display:none;">
+
+    <div class="card" style="margin-bottom:1.25rem;overflow-x:auto;">
+        <div class="card-title">Summary</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Scenario</th>
+                    <th>Prediction</th>
+                    <th style="text-align:right;">Poor %</th>
+                    <th style="text-align:right;">Average %</th>
+                    <th style="text-align:right;">Good %</th>
+                    <th style="text-align:right;">Confidence %</th>
+                </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+        </table>
+    </div>
+
+    <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-title">Probability Breakdown</div>
+        <div class="chart-container-md">
+            <canvas id="comparisonChart"></canvas>
+        </div>
+    </div>
+
+    <div id="winner-card" class="winner-card" style="display:none;">
+        <div class="winner-crown">&#x1F451;</div>
+        <div class="winner-label">Best Configuration</div>
+        <div id="winner-name" class="winner-name">—</div>
+        <div id="winner-details" class="winner-details"></div>
+    </div>
+
+</div>
+
+<!-- Card Template -->
+<template id="scenario-template">
+    <div class="scenario-card" data-index="">
+        <div class="scenario-header">
+            <input type="text" class="scenario-name" value="">
+            <button onclick="removeScenario(this)" class="scenario-remove">×</button>
+        </div>
+        <div class="scenario-body">
+            <div class="scenario-grid">
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Category</label>
+                    <select class="field-category"></select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Content Rating</label>
+                    <select class="field-content_rating"></select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Primary Genre</label>
+                    <select class="field-primary_genre"></select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Type</label>
+                    <select class="field-is_free" onchange="togglePrice(this)">
+                        <option value="1">Free</option>
+                        <option value="0">Paid</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Reviews</label>
+                    <input type="number" class="field-reviews" value="10000" min="0" placeholder="10000">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Installs</label>
+                    <select class="field-installs">
+                        <option value="1000">1K</option><option value="5000">5K</option>
+                        <option value="10000">10K</option><option value="50000">50K</option>
+                        <option value="100000" selected>100K</option><option value="500000">500K</option>
+                        <option value="1000000">1M</option><option value="5000000">5M</option>
+                        <option value="10000000">10M</option><option value="50000000">50M</option>
+                        <option value="100000000">100M</option><option value="500000000">500M</option>
+                        <option value="1000000000">1B</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Size (MB)</label>
+                    <input type="number" class="field-size_mb" value="25" min="0" step="0.1">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Price (USD)</label>
+                    <input type="number" class="field-price" value="0" min="0" step="0.01" disabled>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Days Since Update</label>
+                    <input type="number" class="field-days_since_update" value="90" min="0">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Min Android Ver.</label>
+                    <input type="number" class="field-min_android_ver" value="4.0" min="1" step="0.1">
+                </div>
+
+            </div>
+        </div>
+        <div class="scenario-footer">
+            <div class="card-error"></div>
+            <button onclick="predictSingle(this)" class="btn-primary full">Predict</button>
+            <div class="card-result"></div>
+        </div>
+    </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const CATEGORIES      = {{ categories | tojson }};
+    const CONTENT_RATINGS = {{ content_ratings | tojson }};
+    const PRIMARY_GENRES  = {{ primary_genres | tojson }};
+
+    let scenarioCount = 0;
+
+    function populateSelect(sel, opts) {
+        opts.forEach(o => { const el = document.createElement('option'); el.value = el.textContent = o; sel.appendChild(el); });
+    }
+
+    function addScenario() {
+        if (scenarioCount >= 3) return;
+        scenarioCount++;
+        const clone = document.getElementById('scenario-template').content.cloneNode(true);
+        const card  = clone.querySelector('.scenario-card');
+        card.dataset.index = scenarioCount;
+        card.querySelector('.scenario-name').value = 'Scenario ' + scenarioCount;
+        populateSelect(card.querySelector('.field-category'),       CATEGORIES);
+        populateSelect(card.querySelector('.field-content_rating'), CONTENT_RATINGS);
+        populateSelect(card.querySelector('.field-primary_genre'),  PRIMARY_GENRES);
+        document.getElementById('scenarios-container').appendChild(clone);
+        document.getElementById('add-btn').disabled = scenarioCount >= 3;
+    }
+
+    function removeScenario(btn) {
+        btn.closest('.scenario-card').remove();
+        scenarioCount--;
+        document.querySelectorAll('.scenario-card').forEach((c, i) => {
+            c.dataset.index = i+1;
+            if (/^Scenario \d+$/.test(c.querySelector('.scenario-name').value))
+                c.querySelector('.scenario-name').value = 'Scenario '+(i+1);
+        });
+        document.getElementById('add-btn').disabled = false;
+        if (scenarioCount === 0) document.getElementById('results-section').style.display = 'none';
+    }
+
+    function togglePrice(sel) {
+        const priceInput = sel.closest('.scenario-card').querySelector('.field-price');
+        priceInput.disabled = sel.value !== '0';
+        if (sel.value !== '0') priceInput.value = '0';
+    }
+
+    function collectScenarioData(card) {
+        const isFree = card.querySelector('.field-is_free').value;
+        return {
+            category:          card.querySelector('.field-category').value,
+            content_rating:    card.querySelector('.field-content_rating').value,
+            primary_genre:     card.querySelector('.field-primary_genre').value,
+            is_free:           isFree,
+            reviews:           card.querySelector('.field-reviews').value,
+            installs:          card.querySelector('.field-installs').value,
+            size_mb:           card.querySelector('.field-size_mb').value,
+            price:             isFree === '1' ? '0' : card.querySelector('.field-price').value,
+            days_since_update: card.querySelector('.field-days_since_update').value,
+            min_android_ver:   parseFloat(card.querySelector('.field-min_android_ver').value).toFixed(1),
+        };
+    }
+
+    function applyCardResult(card, data) {
+        const resultEl = card.querySelector('.card-result');
+        resultEl.textContent = data.label.toUpperCase() + ' — ' + data.confidence.toFixed(1) + '% confident';
+        const cls = data.label === 'Good' ? 'badge-good' : data.label === 'Average' ? 'badge-average' : 'badge-poor';
+        resultEl.className = 'card-result ' + cls;
+        resultEl.style.display = '';
+    }
+
+    function predictSingle(btn) {
+        const card  = btn.closest('.scenario-card');
+        const errEl = card.querySelector('.card-error');
+        errEl.style.display = 'none';
+        card.querySelector('.card-result').style.display = 'none';
+        btn.disabled = true; btn.textContent = 'Predicting…';
+
+        fetch('/api/predict', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(collectScenarioData(card)) })
+        .then(r => r.json())
+        .then(d => {
+            btn.disabled = false; btn.textContent = 'Predict';
+            if (d.error) { errEl.textContent = d.error; errEl.style.display = ''; return; }
+            applyCardResult(card, d);
+        })
+        .catch(() => { btn.disabled = false; btn.textContent = 'Predict'; errEl.textContent = 'Network error.'; errEl.style.display = ''; });
+    }
+
+    function runComparison() {
+        const cards = Array.from(document.querySelectorAll('.scenario-card'));
+        if (!cards.length) return;
+        document.getElementById('compare-spinner').style.display = '';
+        document.getElementById('compare-btn-text').textContent = 'Running…';
+        cards.forEach(c => { c.querySelector('.card-error').style.display = 'none'; });
+
+        Promise.all(cards.map(card =>
+            fetch('/api/predict', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(collectScenarioData(card)) })
+            .then(r => r.json())
+            .then(data => ({ card, data, name: card.querySelector('.scenario-name').value }))
+        )).then(results => {
+            document.getElementById('compare-spinner').style.display = 'none';
+            document.getElementById('compare-btn-text').textContent = 'Compare All';
+            let hasErr = false;
+            results.forEach(({ card, data }) => {
+                if (data.error) { hasErr = true; const e = card.querySelector('.card-error'); e.textContent = data.error; e.style.display = ''; }
+            });
+            const valid = results.filter(r => !r.data.error);
+            if (valid.length) renderResults(valid);
+        }).catch(() => {
+            document.getElementById('compare-spinner').style.display = 'none';
+            document.getElementById('compare-btn-text').textContent = 'Compare All';
+        });
+    }
+
+    function renderResults(results) {
+        document.getElementById('results-section').style.display = '';
+
+        let bestIdx = 0;
+        results.forEach((r, i) => { if (r.data.probabilities.Good > results[bestIdx].data.probabilities.Good) bestIdx = i; });
+
+        const tbody = document.getElementById('results-tbody');
+        tbody.innerHTML = '';
+        results.forEach((r, i) => {
+            const p = r.data.probabilities;
+            const isBest = i === bestIdx;
+            const badgeCls = r.data.label==='Good' ? 'badge-good' : r.data.label==='Average' ? 'badge-average' : 'badge-poor';
+            const tr = document.createElement('tr');
+            if (isBest) tr.classList.add('best-row');
+            tr.innerHTML = `
+                <td style="font-weight:600;">${r.name}${isBest ? ' <span class="badge-average" style="margin-left:6px;font-size:0.72rem;padding:2px 8px;">Best</span>' : ''}</td>
+                <td><span class="${badgeCls}">${r.data.label}</span></td>
+                <td style="text-align:right;color:#f87171;">${(p.Poor*100).toFixed(1)}%</td>
+                <td style="text-align:right;color:#fbbf24;">${(p.Average*100).toFixed(1)}%</td>
+                <td style="text-align:right;color:#4ade80;">${(p.Good*100).toFixed(1)}%</td>
+                <td style="text-align:right;font-weight:600;">${r.data.confidence.toFixed(1)}%</td>`;
+            tbody.appendChild(tr);
+        });
+
+        if (window.comparisonChart) window.comparisonChart.destroy();
+        const ctx = document.getElementById('comparisonChart').getContext('2d');
+        window.comparisonChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: results.map(r => r.name),
+                datasets: [
+                    { label:'Poor',    data: results.map(r => r.data.probabilities.Poor),    backgroundColor:'#ef4444', borderRadius:4 },
+                    { label:'Average', data: results.map(r => r.data.probabilities.Average), backgroundColor:'#f59e0b', borderRadius:4 },
+                    { label:'Good',    data: results.map(r => r.data.probabilities.Good),    backgroundColor:'#22c55e', borderRadius:4 },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position:'top', labels: { color:'#94a3b8' } }, tooltip: { callbacks: { label: c => c.dataset.label+': '+(c.parsed.y*100).toFixed(1)+'%' } } },
+                scales: {
+                    y: { min:0, max:1, ticks: { color:'#94a3b8', callback: v => (v*100).toFixed(0)+'%' }, grid: { color:'#334155' } },
+                    x: { ticks: { color:'#94a3b8' }, grid: { display:false } }
+                }
+            }
+        });
+
+        const wc = document.getElementById('winner-card');
+        if (results.length >= 2) {
+            const winner = results[bestIdx];
+            document.getElementById('winner-name').textContent = winner.name;
+            const details = [
+                'Installs: ' + winner.card.querySelector('.field-installs option:checked').textContent,
+                'Reviews: ' + parseInt(winner.card.querySelector('.field-reviews').value).toLocaleString(),
+                'Type: ' + (winner.card.querySelector('.field-is_free').value === '1' ? 'Free' : 'Paid'),
+            ];
+            document.getElementById('winner-details').innerHTML = details.map(d => `<p>${d}</p>`).join('');
+            wc.style.display = '';
+        } else {
+            wc.style.display = 'none';
+        }
+
+        document.getElementById('results-section').scrollIntoView({ behavior:'smooth', block:'start' });
+    }
+
+    addScenario();
+    addScenario();
+</script>
+{% endblock %}
