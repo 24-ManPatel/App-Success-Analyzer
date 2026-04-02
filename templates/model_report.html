@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Model Report{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb"><a href="/">Home</a><span>›</span>Model Report</div>
+    <h1>Model Report</h1>
+    <p>Training metrics, feature importance, and dataset coverage for all three classifiers.</p>
+</div>
+
+<!-- Model accuracy comparison -->
+<div class="grid-3" style="margin-bottom:1.5rem;">
+    {% set models_info = [
+        ('XGBoost',       '80.18', 'Primary model. Gradient boosted trees with regularisation.',       '#58a6ff'),
+        ('Random Forest', '78.50', 'Bagging ensemble of 100 decision trees. Strong baseline.',          '#3fb950'),
+        ('LightGBM',      '79.80', 'Gradient boosting with leaf-wise tree growth. Fast and efficient.', '#bc8cff'),
+    ] %}
+    {% for name, acc, desc, color in models_info %}
+    <div class="stat-card" style="border-top:2px solid {{ color }};text-align:left;position:relative;">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:{{ color }};margin-bottom:0.5rem;">{{ name }}</div>
+        <div class="stat-num" style="color:{{ color }};text-align:left;font-size:2.25rem;">{{ acc }}%</div>
+        <div class="stat-label" style="text-align:left;margin-bottom:0.75rem;">Test Accuracy</div>
+        <p style="font-size:0.75rem;color:var(--muted);margin:0;line-height:1.5;">{{ desc }}</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Feature importance tabs -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+        <div class="card-title" style="margin:0;">Feature Importance</div>
+        <div style="display:flex;gap:0.375rem;">
+            <button class="btn-secondary fi-tab active-tab" onclick="switchTab('xgb',this)" id="tab-xgb">XGBoost</button>
+            <button class="btn-secondary fi-tab" onclick="switchTab('rf',this)" id="tab-rf">Random Forest</button>
+            <button class="btn-secondary fi-tab" onclick="switchTab('lgbm',this)" id="tab-lgbm">LightGBM</button>
+        </div>
+    </div>
+    <p id="fi-desc" style="font-size:0.78rem;color:var(--muted);margin:0 0 1.25rem;">
+        XGBoost gain-based importance — measures average gain across all splits where a feature appears.
+    </p>
+    <div class="chart-container-lg">
+        <canvas id="importanceChart"></canvas>
+    </div>
+</div>
+
+<!-- Feature breakdown table -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+        <div class="card-title" style="margin:0;">Feature Breakdown — All Models</div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th style="text-align:right;">XGBoost %</th>
+                <th style="min-width:100px;"></th>
+                <th style="text-align:right;">Random Forest %</th>
+                <th style="min-width:100px;"></th>
+                <th style="text-align:right;">LightGBM %</th>
+                <th style="min-width:100px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set rf_map   = {} %}
+            {% set lgbm_map = {} %}
+            {% for fi in all_fi.rf   %}{% set _ = rf_map.update({fi.feature: fi})   %}{% endfor %}
+            {% for fi in all_fi.lgbm %}{% set _ = lgbm_map.update({fi.feature: fi}) %}{% endfor %}
+            {% for fi in feature_importances %}
+            {% set rf_fi   = rf_map.get(fi.feature,   {'importance_pct': 0}) %}
+            {% set lgbm_fi = lgbm_map.get(fi.feature, {'importance_pct': 0}) %}
+            <tr>
+                <td style="font-weight:600;">{{ fi.label }}<br><span style="font-size:0.68rem;color:var(--muted-2);font-family:monospace;">{{ fi.feature }}</span></td>
+                <td style="text-align:right;color:#58a6ff;font-weight:600;font-variant-numeric:tabular-nums;">{{ "%.1f"|format(fi.importance_pct) }}%</td>
+                <td><div class="progress-track"><div class="progress-fill" style="width:{{ fi.importance_pct|round(1) }}%;background:#58a6ff;"></div></div></td>
+                <td style="text-align:right;color:#3fb950;font-weight:600;font-variant-numeric:tabular-nums;">{{ "%.1f"|format(rf_fi.importance_pct) }}%</td>
+                <td><div class="progress-track"><div class="progress-fill" style="width:{{ rf_fi.importance_pct|round(1) }}%;background:#3fb950;"></div></div></td>
+                <td style="text-align:right;color:#bc8cff;font-weight:600;font-variant-numeric:tabular-nums;">{{ "%.1f"|format(lgbm_fi.importance_pct) }}%</td>
+                <td><div class="progress-track"><div class="progress-fill" style="width:{{ lgbm_fi.importance_pct|round(1) }}%;background:#bc8cff;"></div></div></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<div class="two-col" style="margin-bottom:1.5rem;">
+
+    <!-- Dataset info -->
+    <div class="card">
+        <div class="card-title">Dataset</div>
+        <table class="data-table">
+            <tbody>
+                <tr><td style="color:var(--muted);">Source</td><td>Google Play Store</td></tr>
+                <tr><td style="color:var(--muted);">Total Apps</td><td style="font-weight:600;">9,659</td></tr>
+                <tr><td style="color:var(--muted);">Train / Test Split</td><td>80% / 20%</td></tr>
+                <tr><td style="color:var(--muted);">App Categories</td><td>{{ category_count }}</td></tr>
+                <tr><td style="color:var(--muted);">Primary Genres</td><td>{{ genre_count }}</td></tr>
+                <tr><td style="color:var(--muted);">Content Ratings</td><td>{{ rating_count }}</td></tr>
+                <tr><td style="color:var(--muted);">Free Apps</td><td>~92%</td></tr>
+                <tr><td style="color:var(--muted);">Paid Apps</td><td>~8%</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Model architecture -->
+    <div class="card">
+        <div class="card-title">Architecture Details</div>
+        <table class="data-table">
+            <tbody>
+                <tr><td style="color:var(--muted);">Task</td><td>Multi-class Classification</td></tr>
+                <tr><td style="color:var(--muted);">Output Classes</td><td>Poor / Average / Good</td></tr>
+                <tr><td style="color:var(--muted);">Input Features</td><td>10</td></tr>
+                <tr><td style="color:var(--muted);">Categorical Encoding</td><td>Label Encoding</td></tr>
+                <tr><td style="color:var(--muted);">Numeric Transform</td><td>log1p on Reviews &amp; Installs</td></tr>
+                <tr><td style="color:var(--muted);">Logistic Regression</td><td>~50% — excluded</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- Class definitions -->
+<div class="card">
+    <div class="card-title">Output Class Definitions</div>
+    <div class="grid-3">
+        <div style="padding:1rem;border:1px solid var(--border);border-top:2px solid var(--success);border-radius:var(--radius-sm);">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--success);font-weight:700;margin-bottom:0.4rem;">Good — Class 2</div>
+            <p style="font-size:0.775rem;color:var(--muted);margin:0;line-height:1.6;">High install count, strong review volume, recently updated. App performs well relative to peers in its category.</p>
+        </div>
+        <div style="padding:1rem;border:1px solid var(--border);border-top:2px solid var(--warning);border-radius:var(--radius-sm);">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--warning);font-weight:700;margin-bottom:0.4rem;">Average — Class 1</div>
+            <p style="font-size:0.775rem;color:var(--muted);margin:0;line-height:1.6;">Moderate traction. Metrics are neither strong nor weak. Targeted improvements could move it to Good.</p>
+        </div>
+        <div style="padding:1rem;border:1px solid var(--border);border-top:2px solid var(--danger);border-radius:var(--radius-sm);">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--danger);font-weight:700;margin-bottom:0.4rem;">Poor — Class 0</div>
+            <p style="font-size:0.775rem;color:var(--muted);margin:0;line-height:1.6;">Low install base, sparse reviews, or stale. Significant improvement needed across multiple dimensions.</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.fi-tab { font-size:0.72rem; padding:0.35rem 0.75rem; }
+.active-tab { background:var(--surface-3); border-color:var(--border-light); color:var(--text); }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const ALL_FI = {{ all_fi | tojson }};
+const COLORS = { xgb:'#58a6ff', rf:'#3fb950', lgbm:'#bc8cff' };
+const DESCS = {
+    xgb:  'XGBoost gain-based importance — measures average gain across all splits where a feature appears.',
+    rf:   'Random Forest mean decrease in impurity — average reduction in node impurity weighted by node probability.',
+    lgbm: 'LightGBM split-count importance — total number of times a feature is used across all trees.',
+};
+
+let currentModel = 'xgb';
+let chart;
+
+function buildChart(modelKey) {
+    const fi = ALL_FI[modelKey].slice().reverse();
+    const labels = fi.map(d => d.label);
+    const values = fi.map(d => d.importance_pct);
+    const color  = COLORS[modelKey];
+
+    if (chart) chart.destroy();
+    const ctx = document.getElementById('importanceChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                backgroundColor: color + 'cc',
+                borderColor: color,
+                borderWidth: 1,
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: c => ' ' + c.parsed.x.toFixed(1) + '%' }, backgroundColor:'#21262d', borderColor:'#30363d', borderWidth:1, titleColor:'#e6edf3', bodyColor:'#768390' }
+            },
+            scales: {
+                x: { ticks:{ color:'#545d68', callback:v=>v.toFixed(0)+'%', font:{size:11} }, grid:{color:'rgba(48,54,61,0.5)'} },
+                y: { ticks:{ color:'#adbac7', font:{size:11} }, grid:{display:false} }
+            }
+        }
+    });
+}
+
+function switchTab(model, btn) {
+    currentModel = model;
+    document.querySelectorAll('.fi-tab').forEach(b => b.classList.remove('active-tab'));
+    btn.classList.add('active-tab');
+    document.getElementById('fi-desc').textContent = DESCS[model];
+    buildChart(model);
+}
+
+document.addEventListener('DOMContentLoaded', () => buildChart('xgb'));
+</script>
+{% endblock %}

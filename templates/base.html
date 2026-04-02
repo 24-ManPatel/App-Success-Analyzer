@@ -16,13 +16,14 @@
         <a href="/" class="navbar-brand">App Success Analyzer</a>
         <div class="navbar-links">
             {% if request.cookies.get('jwt_token') %}
-                <a href="/"          class="nav-link {{ 'active' if request.path == '/' }}">Home</a>
-                <a href="/dashboard" class="nav-link {{ 'active' if request.path == '/dashboard' }}">Dashboard</a>
-                <a href="/predictor" class="nav-link {{ 'active' if request.path == '/predictor' }}">Predictor</a>
-                <a href="/simulator" class="nav-link {{ 'active' if request.path == '/simulator' }}">Simulator</a>
-                <a href="/insights"  class="nav-link {{ 'active' if request.path == '/insights' }}">Insights</a>
-                <a href="/compare"   class="nav-link {{ 'active' if request.path == '/compare' }}">Compare</a>
-                <a href="/logout"    class="nav-link danger">Logout</a>
+                <a href="/"            class="nav-link {{ 'active' if request.path == '/' }}">Home</a>
+                <a href="/dashboard"   class="nav-link {{ 'active' if request.path == '/dashboard' }}">Dashboard</a>
+                <a href="/predictor"   class="nav-link {{ 'active' if request.path == '/predictor' }}">Predictor</a>
+                <a href="/compare"     class="nav-link {{ 'active' if request.path == '/compare' }}">Compare</a>
+                <a href="/arena"       class="nav-link {{ 'active' if request.path == '/arena' }}">Model Arena</a>
+                <a href="/advisor"     class="nav-link {{ 'active' if request.path == '/advisor' }}">AI Advisor</a>
+                <a href="/model-report" class="nav-link {{ 'active' if request.path == '/model-report' }}">Model Report</a>
+                <a href="/logout"      class="nav-link danger">Logout</a>
             {% else %}
                 <a href="/login"    class="nav-link {{ 'active' if request.path == '/login' }}">Login</a>
                 <a href="/register" class="nav-link {{ 'active' if request.path == '/register' }}">Register</a>

@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Model Arena{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb"><a href="/">Home</a><span>›</span>Model Arena</div>
+    <h1>Model Arena</h1>
+    <p>Run XGBoost, Random Forest, and LightGBM simultaneously — see where they agree and where they diverge.</p>
+</div>
+
+<div class="two-col" style="align-items:start;">
+
+    <!-- LEFT: Controls -->
+    <div class="card">
+        <div class="card-title">App Configuration</div>
+
+        <div class="form-group">
+            <label>Category</label>
+            <select id="a-category">
+                {% for cat in categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+            </select>
+        </div>
+
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Content Rating</label>
+                <select id="a-content_rating">
+                    {% for cr in content_ratings %}<option value="{{ cr }}">{{ cr }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Primary Genre</label>
+                <select id="a-primary_genre">
+                    {% for pg in primary_genres %}<option value="{{ pg }}">{{ pg }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Type</label>
+                <select id="a-is_free">
+                    <option value="1">Free</option>
+                    <option value="0">Paid</option>
+                </select>
+            </div>
+            <div class="form-group" id="a-price-row">
+                <label>Price (USD)</label>
+                <input type="number" id="a-price" value="0" min="0" step="0.01" disabled>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="slider-row"><label>Reviews</label><span class="slider-val" id="a-reviews-val">10,000</span></div>
+            <input type="range" id="a-reviews" min="0" max="5000000" step="1000" value="10000">
+        </div>
+        <div class="form-group">
+            <div class="slider-row"><label>Installs</label><span class="slider-val" id="a-installs-val">100K</span></div>
+            <input type="range" id="a-installs" min="0" max="1000000000" step="100000" value="100000">
+        </div>
+        <div class="form-group">
+            <div class="slider-row"><label>App Size (MB)</label><span class="slider-val" id="a-size-val">25</span></div>
+            <input type="range" id="a-size_mb" min="1" max="500" step="1" value="25">
+        </div>
+        <div class="form-group">
+            <div class="slider-row"><label>Days Since Update</label><span class="slider-val" id="a-days-val">90</span></div>
+            <input type="range" id="a-days_since_update" min="0" max="1000" step="10" value="90">
+        </div>
+        <div class="form-group">
+            <div class="slider-row"><label>Min Android Version</label><span class="slider-val" id="a-android-val">4.0</span></div>
+            <input type="range" id="a-min_android_ver" min="1" max="10" step="0.1" value="4.0">
+        </div>
+
+        <div id="a-status" style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.5rem;height:1rem;"></div>
+    </div>
+
+    <!-- RIGHT: Model results -->
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+
+        <!-- Consensus banner -->
+        <div class="card" id="consensus-card" style="text-align:center;padding:1rem 1.375rem;">
+            <div class="card-title" style="margin-bottom:0.5rem;">Consensus</div>
+            <div id="consensus-text" style="font-size:0.875rem;color:var(--muted);">Waiting for prediction...</div>
+        </div>
+
+        <!-- 3 model cards -->
+        {% set models = [('xgb', 'XGBoost'), ('rf', 'Random Forest'), ('lgbm', 'LightGBM')] %}
+        {% for key, name in models %}
+        <div class="model-card" id="card-{{ key }}">
+            <div class="model-card-header">
+                <div>
+                    <div class="model-name">{{ name }}</div>
+                    <div class="model-acc">Accuracy: {{ model_meta[key].accuracy }}%</div>
+                </div>
+                <div id="badge-{{ key }}" class="model-result-badge lbl-poor" style="opacity:0.35;">—</div>
+            </div>
+            <div style="margin-bottom:0.75rem;">
+                <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--muted);margin-bottom:0.25rem;">
+                    <span>Confidence</span>
+                    <span id="conf-{{ key }}" style="font-weight:600;font-variant-numeric:tabular-nums;">—</span>
+                </div>
+                <div class="progress-track"><div id="conf-bar-{{ key }}" class="progress-fill poor" style="width:0%;transition:width 0.4s ease;"></div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;text-align:center;">
+                {% for cls in ['Poor','Average','Good'] %}
+                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.4rem 0.2rem;">
+                    <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">{{ cls }}</div>
+                    <div id="p-{{ key }}-{{ cls }}" style="font-size:0.875rem;font-weight:700;font-variant-numeric:tabular-nums;color:{% if cls=='Good' %}var(--success){% elif cls=='Average' %}var(--warning){% else %}var(--danger){% endif %};">—</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Comparison chart -->
+        <div class="card">
+            <div class="card-title">Probability Comparison</div>
+            <div class="chart-container-md">
+                <canvas id="arenaChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="a-toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+function fmt(n) {
+    n = parseInt(n);
+    if (n >= 1e9) return (n/1e9).toFixed(1)+'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+    if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+    return n.toString();
+}
+function debounce(fn, d) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), d); }; }
+function toast(msg) { const t = document.getElementById('a-toast'); t.textContent = msg; t.style.opacity='1'; setTimeout(()=>{t.style.opacity='0';},3000); }
+
+// Slider displays
+document.getElementById('a-reviews').addEventListener('input',function(){document.getElementById('a-reviews-val').textContent=parseInt(this.value).toLocaleString();});
+document.getElementById('a-installs').addEventListener('input',function(){document.getElementById('a-installs-val').textContent=fmt(this.value);});
+document.getElementById('a-size_mb').addEventListener('input',function(){document.getElementById('a-size-val').textContent=this.value;});
+document.getElementById('a-days_since_update').addEventListener('input',function(){document.getElementById('a-days-val').textContent=this.value;});
+document.getElementById('a-min_android_ver').addEventListener('input',function(){document.getElementById('a-android-val').textContent=parseFloat(this.value).toFixed(1);});
+document.getElementById('a-is_free').addEventListener('change',function(){
+    const p=document.getElementById('a-price');
+    p.disabled=this.value!=='0'; if(this.value==='1')p.value='0';
+});
+
+// Chart setup
+const arenaCtx = document.getElementById('arenaChart').getContext('2d');
+const arenaChart = new Chart(arenaCtx, {
+    type: 'bar',
+    data: {
+        labels: ['XGBoost','Random Forest','LightGBM'],
+        datasets: [
+            { label:'Poor',    data:[0,0,0], backgroundColor:'rgba(248,81,73,0.75)',  borderRadius:3 },
+            { label:'Average', data:[0,0,0], backgroundColor:'rgba(210,153,34,0.75)', borderRadius:3 },
+            { label:'Good',    data:[0,0,0], backgroundColor:'rgba(63,185,80,0.75)',  borderRadius:3 },
+        ]
+    },
+    options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins: {
+            legend:{ position:'top', labels:{color:'#768390', font:{size:11}, boxWidth:12} },
+            tooltip:{ callbacks:{ label:c=>c.dataset.label+': '+(c.parsed.y*100).toFixed(1)+'%' }, backgroundColor:'#21262d', borderColor:'#30363d', borderWidth:1, titleColor:'#e6edf3', bodyColor:'#768390' }
+        },
+        scales: {
+            y:{ min:0, max:1, ticks:{color:'#545d68', callback:v=>(v*100).toFixed(0)+'%', font:{size:11}}, grid:{color:'rgba(48,54,61,0.6)'} },
+            x:{ ticks:{color:'#768390', font:{size:11}}, grid:{display:false} }
+        }
+    }
+});
+
+function getPayload() {
+    const isFree = document.getElementById('a-is_free').value;
+    return {
+        category:          document.getElementById('a-category').value,
+        reviews:           document.getElementById('a-reviews').value,
+        installs:          document.getElementById('a-installs').value,
+        size_mb:           document.getElementById('a-size_mb').value,
+        is_free:           isFree,
+        price:             isFree==='1' ? '0' : (document.getElementById('a-price').value || '0'),
+        content_rating:    document.getElementById('a-content_rating').value,
+        primary_genre:     document.getElementById('a-primary_genre').value,
+        days_since_update: document.getElementById('a-days_since_update').value,
+        min_android_ver:   parseFloat(document.getElementById('a-min_android_ver').value).toFixed(1),
+    };
+}
+
+function labelClass(lbl) {
+    return lbl==='Good' ? 'lbl-good' : lbl==='Average' ? 'lbl-average' : 'lbl-poor';
+}
+function progressClass(lbl) {
+    return lbl==='Good' ? 'good' : lbl==='Average' ? 'average' : 'poor';
+}
+
+function updateArena(results) {
+    const modelKeys = ['xgb','rf','lgbm'];
+    modelKeys.forEach((key,i) => {
+        const r = results[key];
+        const badge = document.getElementById('badge-'+key);
+        badge.textContent = r.label.toUpperCase();
+        badge.className = 'model-result-badge badge-anim ' + labelClass(r.label);
+        badge.style.opacity = '1';
+        badge.style.fontSize = '0.875rem';
+        badge.style.padding = '0.3rem 1rem';
+
+        document.getElementById('conf-'+key).textContent = r.confidence.toFixed(1)+'%';
+        const cb = document.getElementById('conf-bar-'+key);
+        cb.style.width = r.confidence.toFixed(1)+'%';
+        cb.className = 'progress-fill ' + progressClass(r.label);
+
+        const card = document.getElementById('card-'+key);
+        card.className = 'model-card';
+
+        ['Poor','Average','Good'].forEach(cls => {
+            document.getElementById('p-'+key+'-'+cls).textContent = (r.probabilities[cls]*100).toFixed(1)+'%';
+        });
+
+        arenaChart.data.datasets[0].data[i] = results[key].probabilities.Poor;
+        arenaChart.data.datasets[1].data[i] = results[key].probabilities.Average;
+        arenaChart.data.datasets[2].data[i] = results[key].probabilities.Good;
+    });
+    arenaChart.update();
+
+    // Consensus
+    const labels = modelKeys.map(k => results[k].label);
+    const allSame = labels.every(l => l === labels[0]);
+    const consensus = document.getElementById('consensus-text');
+    if (allSame) {
+        consensus.innerHTML = 'All 3 models agree: <strong style="color:'+
+            (labels[0]==='Good'?'var(--success)':labels[0]==='Average'?'var(--warning)':'var(--danger)')+'">'+
+            labels[0].toUpperCase()+'</strong>';
+        // highlight winner card
+        const bestKey = modelKeys.reduce((a,b) => results[a].confidence > results[b].confidence ? a : b);
+        document.getElementById('card-'+bestKey).classList.add('winner');
+    } else {
+        const majority = labels.sort((a,b)=>labels.filter(v=>v===b).length-labels.filter(v=>v===a).length)[0];
+        consensus.innerHTML = 'Majority: <strong>'+majority.toUpperCase()+'</strong> — models diverge on confidence';
+    }
+    document.getElementById('a-status').textContent = '';
+}
+
+const liveArena = debounce(function() {
+    document.getElementById('a-status').textContent = 'Updating...';
+    fetch('/api/predict-all', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(getPayload()) })
+    .then(r => r.json())
+    .then(d => { if (d.error) { toast(d.error); document.getElementById('a-status').textContent=''; } else updateArena(d); })
+    .catch(() => { toast('Network error.'); document.getElementById('a-status').textContent=''; });
+}, 350);
+
+['a-category','a-content_rating','a-primary_genre','a-is_free','a-price',
+ 'a-reviews','a-installs','a-size_mb','a-days_since_update','a-min_android_ver'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', liveArena);
+    el.addEventListener('change', liveArena);
+});
+
+liveArena();
+</script>
+{% endblock %}

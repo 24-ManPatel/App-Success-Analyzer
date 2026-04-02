@@ -7,3 +7,5 @@ xgboost
 scikit-learn
 joblib
 numpy
+openai
+python-dotenv

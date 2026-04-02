@@ -46,13 +46,12 @@
 
     <div class="card" style="margin-bottom:1.25rem;">
         <div class="card-title">Probability Breakdown</div>
-        <div class="chart-container-md">
+        <div style="position:relative;height:300px;">
             <canvas id="comparisonChart"></canvas>
         </div>
     </div>
 
     <div id="winner-card" class="winner-card" style="display:none;">
-        <div class="winner-crown">&#x1F451;</div>
         <div class="winner-label">Best Configuration</div>
         <div id="winner-name" class="winner-name">—</div>
         <div id="winner-details" class="winner-details"></div>
@@ -248,7 +247,10 @@
     }
 
     function renderResults(results) {
-        document.getElementById('results-section').style.display = '';
+        const section = document.getElementById('results-section');
+        section.style.display = '';
+        // Force layout so Chart.js can read canvas dimensions
+        section.offsetHeight;
 
         let bestIdx = 0;
         results.forEach((r, i) => { if (r.data.probabilities.Good > results[bestIdx].data.probabilities.Good) bestIdx = i; });

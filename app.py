@@ -9,6 +9,24 @@ import datetime
 import re
 from functools import wraps
 import predictor
+from openai import OpenAI
+
+nvidia_client = OpenAI(
+    base_url="https://integrate.api.nvidia.com/v1",
+    api_key=config.NVIDIA_API_KEY,
+)
+
+_ADVISOR_SYSTEM = (
+    "You are an expert Google Play Store app analyst. "
+    "Given an app's metrics and its ML-predicted success class, produce a concise structured improvement report. "
+    "Be specific and data-driven. "
+    "Respond with EXACTLY these three sections, each starting with the header on its own line:\n"
+    "### Quick Wins\n"
+    "### Strategic Improvements\n"
+    "### Risk Factors\n"
+    "Use 2-3 bullet points (starting with -) under each section. No extra prose outside these sections."
+)
+
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -210,26 +228,6 @@ def predictor_page():
     )
 
 
-@app.route("/simulator")
-@token_required
-def simulator():
-    categories = sorted(predictor.category_map.keys())
-    content_ratings = sorted(predictor.content_rating_map.keys())
-    primary_genres = sorted(predictor.primary_genre_map.keys())
-    return render_template(
-        "simulator.html",
-        categories=categories,
-        content_ratings=content_ratings,
-        primary_genres=primary_genres,
-    )
-
-
-@app.route("/insights")
-@token_required
-def insights():
-    feature_importances = predictor.get_feature_importances()
-    return render_template("insights.html", feature_importances=feature_importances)
-
 
 @app.route("/compare")
 @token_required
@@ -253,6 +251,133 @@ def api_predict():
         return jsonify(predictor.predict(data))
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/predict-all", methods=["POST"])
+@token_required
+def api_predict_all():
+    try:
+        data = request.get_json(force=True)
+        return jsonify(predictor.predict_all(data))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/arena")
+@token_required
+def arena():
+    categories      = sorted(predictor.category_map.keys())
+    content_ratings = sorted(predictor.content_rating_map.keys())
+    primary_genres  = sorted(predictor.primary_genre_map.keys())
+    return render_template(
+        "arena.html",
+        categories=categories,
+        content_ratings=content_ratings,
+        primary_genres=primary_genres,
+        model_meta=predictor.MODEL_META,
+    )
+
+
+@app.route("/advisor", methods=["GET", "POST"])
+@token_required
+def advisor():
+    categories      = sorted(predictor.category_map.keys())
+    content_ratings = sorted(predictor.content_rating_map.keys())
+    primary_genres  = sorted(predictor.primary_genre_map.keys())
+
+    if request.method == "POST":
+        form_data = {
+            "category":          request.form.get("category", ""),
+            "reviews":           request.form.get("reviews", 0),
+            "installs":          request.form.get("installs", 0),
+            "size_mb":           request.form.get("size_mb", 0.0),
+            "is_free":           request.form.get("is_free", 1),
+            "price":             request.form.get("price", "") or "0",
+            "content_rating":    request.form.get("content_rating", ""),
+            "primary_genre":     request.form.get("primary_genre", ""),
+            "days_since_update": request.form.get("days_since_update", 0),
+            "min_android_ver":   request.form.get("min_android_ver", 1.0),
+        }
+        prediction = predictor.predict(form_data)
+        if "error" in prediction:
+            flash(prediction["error"])
+            return redirect("/advisor")
+
+        top_features = predictor.get_feature_importances()[:3]
+
+        user_prompt = (
+            f"App Metrics:\n"
+            f"- Category: {form_data['category']}\n"
+            f"- Installs: {form_data['installs']}\n"
+            f"- Reviews: {form_data['reviews']}\n"
+            f"- Size (MB): {form_data['size_mb']}\n"
+            f"- Free: {'Yes' if str(form_data['is_free']) == '1' else 'No'}\n"
+            f"- Price (USD): {form_data['price']}\n"
+            f"- Content Rating: {form_data['content_rating']}\n"
+            f"- Primary Genre: {form_data['primary_genre']}\n"
+            f"- Days Since Last Update: {form_data['days_since_update']}\n"
+            f"- Min Android Version: {form_data['min_android_ver']}\n\n"
+            f"ML Prediction: {prediction['label']} (confidence {prediction['confidence']:.1f}%)\n"
+            f"Probabilities — Poor: {prediction['probabilities']['Poor']*100:.1f}%, "
+            f"Average: {prediction['probabilities']['Average']*100:.1f}%, "
+            f"Good: {prediction['probabilities']['Good']*100:.1f}%\n\n"
+            f"Top 3 predictive features (by importance):\n"
+            + "\n".join(f"- {f['label']}: {f['importance_pct']:.1f}%" for f in top_features)
+            + "\n\nGenerate the improvement report."
+        )
+
+        try:
+            completion = nvidia_client.chat.completions.create(
+                model="meta/llama-3.1-70b-instruct",
+                messages=[
+                    {"role": "system", "content": _ADVISOR_SYSTEM},
+                    {"role": "user",   "content": user_prompt},
+                ],
+                temperature=0.6,
+                max_tokens=800,
+            )
+            ai_report = completion.choices[0].message.content
+        except Exception as e:
+            flash(f"AI service error: {str(e)}")
+            return redirect("/advisor")
+
+        return render_template(
+            "advisor.html",
+            categories=categories,
+            content_ratings=content_ratings,
+            primary_genres=primary_genres,
+            prediction=prediction,
+            ai_report=ai_report,
+            form_data=form_data,
+        )
+
+    return render_template(
+        "advisor.html",
+        categories=categories,
+        content_ratings=content_ratings,
+        primary_genres=primary_genres,
+        prediction=None,
+        ai_report=None,
+        form_data={},
+    )
+
+
+@app.route("/model-report")
+@token_required
+def model_report():
+    all_fi         = predictor.get_all_feature_importances()
+    category_count = len(predictor.category_map)
+    genre_count    = len(predictor.primary_genre_map)
+    rating_count   = len(predictor.content_rating_map)
+    return render_template(
+        "model_report.html",
+        feature_importances=all_fi["xgb"],
+        all_fi=all_fi,
+        model_meta=predictor.MODEL_META,
+        category_count=category_count,
+        genre_count=genre_count,
+        rating_count=rating_count,
+    )
 
 
 if __name__ == "__main__":

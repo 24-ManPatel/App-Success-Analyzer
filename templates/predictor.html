@@ -1,183 +1,253 @@
 {% extends "base.html" %}
-{% block title %}App Success Predictor{% endblock %}
+{% block title %}Predictor{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div class="breadcrumb"><a href="/">Home</a><span>›</span>Predictor</div>
     <h1>App Success Predictor</h1>
-    <p>Enter your app's details to receive an instant success prediction.</p>
+    <p>Results update live as you adjust values. Submit for a full confidence breakdown.</p>
 </div>
 
 <div class="two-col">
 
     <!-- LEFT: Form -->
     <div class="card">
-        <div class="card-title">App Details</div>
+        <div class="card-title">App Configuration</div>
         <form method="POST" action="/predictor" id="predictor-form">
 
             <div class="form-group">
                 <label>Category</label>
-                <select name="category" required>
+                <select name="category" id="f-category" required>
                     {% for cat in categories %}
                         <option value="{{ cat }}" {% if form_data.get('category') == cat %}selected{% endif %}>{{ cat }}</option>
                     {% endfor %}
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>Number of Reviews</label>
-                <input type="number" name="reviews" min="0" required
-                       value="{{ form_data.get('reviews', '') }}" placeholder="e.g. 5000">
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Content Rating</label>
+                    <select name="content_rating" id="f-content_rating" required>
+                        {% for cr in content_ratings %}
+                            <option value="{{ cr }}" {% if form_data.get('content_rating') == cr %}selected{% endif %}>{{ cr }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Primary Genre</label>
+                    <select name="primary_genre" id="f-primary_genre" required>
+                        {% for pg in primary_genres %}
+                            <option value="{{ pg }}" {% if form_data.get('primary_genre') == pg %}selected{% endif %}>{{ pg }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Type</label>
+                    <select name="is_free" id="f-is_free" required>
+                        <option value="1" {% if form_data.get('is_free')|string != '0' %}selected{% endif %}>Free</option>
+                        <option value="0" {% if form_data.get('is_free')|string == '0' %}selected{% endif %}>Paid</option>
+                    </select>
+                </div>
+                <div class="form-group" id="price-field" style="{% if form_data.get('is_free')|string != '0' %}display:none{% endif %}">
+                    <label>Price (USD)</label>
+                    <input type="number" name="price" id="f-price" min="0" step="0.01"
+                           value="{{ form_data.get('price', '') }}" placeholder="0.00">
+                </div>
             </div>
 
             <div class="form-group">
-                <label>Installs</label>
-                <select name="installs" required>
-                    {% set install_options = [
-                        (1000,'1K'),(5000,'5K'),(10000,'10K'),(50000,'50K'),
-                        (100000,'100K'),(500000,'500K'),(1000000,'1M'),(5000000,'5M'),
-                        (10000000,'10M'),(50000000,'50M'),(100000000,'100M'),
-                        (500000000,'500M'),(1000000000,'1B')
-                    ] %}
-                    {% for val, lbl in install_options %}
-                        <option value="{{ val }}" {% if form_data.get('installs')|string == val|string %}selected{% endif %}>{{ lbl }}</option>
-                    {% endfor %}
-                </select>
+                <div class="slider-row"><label>Number of Reviews</label><span class="slider-val" id="reviews-val">{{ form_data.get('reviews', 10000) | int | format_number if form_data.get('reviews') else '10,000' }}</span></div>
+                <input type="range" name="reviews" id="f-reviews" min="0" max="5000000" step="1000" value="{{ form_data.get('reviews', 10000) }}">
             </div>
 
             <div class="form-group">
-                <label>App Size (MB)</label>
-                <input type="number" name="size_mb" min="0" step="0.1" required
-                       value="{{ form_data.get('size_mb', '') }}" placeholder="e.g. 25.5">
+                <div class="slider-row"><label>Installs</label><span class="slider-val" id="installs-val">100K</span></div>
+                <input type="range" name="installs" id="f-installs" min="0" max="1000000000" step="100000" value="{{ form_data.get('installs', 100000) }}">
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <div class="slider-row"><label>App Size (MB)</label><span class="slider-val" id="size-val">25</span></div>
+                    <input type="range" name="size_mb" id="f-size_mb" min="1" max="500" step="1" value="{{ form_data.get('size_mb', 25) }}">
+                </div>
+                <div class="form-group">
+                    <div class="slider-row"><label>Days Since Update</label><span class="slider-val" id="days-val">90</span></div>
+                    <input type="range" name="days_since_update" id="f-days_since_update" min="0" max="1000" step="10" value="{{ form_data.get('days_since_update', 90) }}">
+                </div>
             </div>
 
             <div class="form-group">
-                <label>Type</label>
-                <select name="is_free" id="is_free" required>
-                    <option value="1" {% if form_data.get('is_free')|string != '0' %}selected{% endif %}>Free</option>
-                    <option value="0" {% if form_data.get('is_free')|string == '0' %}selected{% endif %}>Paid</option>
-                </select>
+                <div class="slider-row"><label>Min Android Version</label><span class="slider-val" id="android-val">4.0</span></div>
+                <input type="range" name="min_android_ver" id="f-min_android_ver" min="1" max="10" step="0.1" value="{{ form_data.get('min_android_ver', 4.0) }}">
             </div>
 
-            <div class="form-group" id="price-field" style="{% if form_data.get('is_free')|string != '0' %}display:none{% endif %}">
-                <label>Price (USD)</label>
-                <input type="number" name="price" min="0" step="0.01"
-                       value="{{ form_data.get('price', '') }}" placeholder="e.g. 1.99">
-            </div>
-
-            <div class="form-group">
-                <label>Content Rating</label>
-                <select name="content_rating" required>
-                    {% for cr in content_ratings %}
-                        <option value="{{ cr }}" {% if form_data.get('content_rating') == cr %}selected{% endif %}>{{ cr }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Primary Genre</label>
-                <select name="primary_genre" required>
-                    {% for pg in primary_genres %}
-                        <option value="{{ pg }}" {% if form_data.get('primary_genre') == pg %}selected{% endif %}>{{ pg }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Days Since Last Update</label>
-                <input type="number" name="days_since_update" min="0" required
-                       value="{{ form_data.get('days_since_update', '') }}" placeholder="e.g. 30">
-            </div>
-
-            <div class="form-group">
-                <label>Min Android Version</label>
-                <input type="number" name="min_android_ver" min="1.0" step="0.1" required
-                       value="{{ form_data.get('min_android_ver', '') }}" placeholder="e.g. 4.1">
-            </div>
-
-            <button type="submit" class="btn-primary full" style="margin-top:0.5rem;">Predict Success</button>
+            <hr class="divider">
+            <button type="submit" class="btn-primary full" id="submit-btn">Get Full Report</button>
         </form>
     </div>
 
-    <!-- RIGHT: Result -->
-    <div id="result-col">
+    <!-- RIGHT: Live + Full Results -->
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+
+        <!-- Live prediction card -->
+        <div class="card" id="live-card">
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.875rem;">
+                <span>Live Prediction</span>
+                <span id="live-spinner" style="display:none;font-size:0.7rem;color:var(--muted);">updating...</span>
+            </div>
+            <div style="text-align:center;margin-bottom:0.875rem;">
+                <div id="live-badge" class="badge-anim lbl-poor">—</div>
+            </div>
+            <p id="live-conf-text" style="text-align:center;color:var(--muted);font-size:0.8rem;margin:0 0 0.75rem;">Adjust values above to see a live prediction</p>
+            <div class="progress-track"><div id="live-bar" class="progress-fill poor" style="width:0%"></div></div>
+        </div>
+
+        <!-- Probability bars -->
+        <div class="card" id="live-probs-card">
+            <div class="card-title">Probability Breakdown</div>
+            <div style="display:flex;flex-direction:column;gap:0.6rem;" id="live-prob-rows">
+                {% for cls, color_cls in [('Good','good'),('Average','average'),('Poor','poor')] %}
+                <div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:0.3rem;">
+                        <span style="color:var(--muted);">{{ cls }}</span>
+                        <span id="pct-{{ cls }}" style="font-weight:600;font-variant-numeric:tabular-nums;">—</span>
+                    </div>
+                    <div class="progress-track"><div id="bar-{{ cls }}" class="progress-fill {{ color_cls }}" style="width:0%"></div></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Full result card (only after form POST) -->
         {% if result %}
-        <div class="card" style="text-align:center;">
-            <!-- Badge -->
-            {% if result.label == 'Good' %}
-                <div class="badge-anim lbl-good" style="margin-bottom:1rem;">GOOD</div>
-            {% elif result.label == 'Average' %}
-                <div class="badge-anim lbl-average" style="margin-bottom:1rem;">AVERAGE</div>
-            {% else %}
-                <div class="badge-anim lbl-poor" style="margin-bottom:1rem;">POOR</div>
-            {% endif %}
-
-            <p style="color:var(--muted);margin:0 0 1.25rem;">
-                Model is <strong style="color:var(--text);">{{ "%.1f"|format(result.confidence) }}%</strong> confident
-            </p>
-
-            <!-- Doughnut -->
-            <div style="width:200px;height:200px;margin:0 auto 1.5rem;">
-                <canvas id="probChart"></canvas>
-            </div>
-
-            <!-- Legend -->
-            <div style="display:flex;justify-content:space-around;margin-bottom:1.5rem;">
-                <div>
-                    <div style="width:10px;height:10px;background:#ef4444;border-radius:50%;margin:0 auto 4px;"></div>
-                    <div style="font-size:0.78rem;color:var(--muted);">Poor</div>
-                    <div style="font-weight:700;font-size:0.9rem;">{{ "%.1f"|format(result.probabilities.Poor * 100) }}%</div>
-                </div>
-                <div>
-                    <div style="width:10px;height:10px;background:#f59e0b;border-radius:50%;margin:0 auto 4px;"></div>
-                    <div style="font-size:0.78rem;color:var(--muted);">Average</div>
-                    <div style="font-weight:700;font-size:0.9rem;">{{ "%.1f"|format(result.probabilities.Average * 100) }}%</div>
-                </div>
-                <div>
-                    <div style="width:10px;height:10px;background:#22c55e;border-radius:50%;margin:0 auto 4px;"></div>
-                    <div style="font-size:0.78rem;color:var(--muted);">Good</div>
-                    <div style="font-weight:700;font-size:0.9rem;">{{ "%.1f"|format(result.probabilities.Good * 100) }}%</div>
-                </div>
-            </div>
-
-            <p style="font-size:0.875rem;color:var(--muted);margin:0;">
+        <div class="card" style="border-top:2px solid {% if result.label=='Good' %}var(--success){% elif result.label=='Average' %}var(--warning){% else %}var(--danger){% endif %};">
+            <div class="card-title">Full Report</div>
+            <div style="text-align:center;margin-bottom:1rem;">
                 {% if result.label == 'Good' %}
-                    This app is predicted to perform well based on its install count and review volume.
+                    <div class="badge-anim lbl-good">GOOD</div>
                 {% elif result.label == 'Average' %}
-                    This app is predicted to perform moderately — there is room for improvement in key metrics.
+                    <div class="badge-anim lbl-average">AVERAGE</div>
                 {% else %}
-                    This app may underperform. Consider improving its install count, reviews, or update frequency.
+                    <div class="badge-anim lbl-poor">POOR</div>
+                {% endif %}
+                <p style="color:var(--muted);margin:0.625rem 0 0;font-size:0.8rem;">
+                    XGBoost is <strong style="color:var(--text);">{{ "%.1f"|format(result.confidence) }}%</strong> confident
+                </p>
+            </div>
+            <div style="width:200px;height:200px;margin:0 auto 1rem;">
+                <canvas id="doughnut"></canvas>
+            </div>
+            <p style="font-size:0.775rem;color:var(--muted);text-align:center;margin:0;">
+                {% if result.label == 'Good' %}
+                    Strong install count and review volume drive this prediction.
+                {% elif result.label == 'Average' %}
+                    Moderate metrics — targeted improvements could push this to Good.
+                {% else %}
+                    Low traction across key features. Review install count and update frequency.
                 {% endif %}
             </p>
         </div>
-        {% else %}
-        <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:280px;gap:0.75rem;">
-            <div style="font-size:3rem;opacity:0.2;">📊</div>
-            <p style="font-size:1rem;font-weight:600;color:var(--muted);margin:0;">No prediction yet</p>
-            <p style="font-size:0.875rem;color:var(--muted);margin:0;">Fill in the app details and click <strong>Predict Success</strong>.</p>
-        </div>
         {% endif %}
-    </div>
 
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    document.getElementById('is_free').addEventListener('change', function() {
-        document.getElementById('price-field').style.display = this.value === '0' ? '' : 'none';
-    });
+function fmt(n) {
+    n = parseInt(n);
+    if (n >= 1e9) return (n/1e9).toFixed(1)+'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+    if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+    return n.toString();
+}
+function debounce(fn, d) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), d); }; }
 
-    {% if result %}
-    document.getElementById('result-col').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    const ctx = document.getElementById('probChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Poor', 'Average', 'Good'],
-            datasets: [{ data: [{{ result.probabilities.Poor }}, {{ result.probabilities.Average }}, {{ result.probabilities.Good }}], backgroundColor: ['#ef4444','#f59e0b','#22c55e'], borderWidth: 2, borderColor: '#1e293b' }]
-        },
-        options: { responsive: true, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.label + ': ' + (ctx.parsed * 100).toFixed(1) + '%' } } } }
+// Slider displays
+document.getElementById('f-reviews').addEventListener('input', function() { document.getElementById('reviews-val').textContent = parseInt(this.value).toLocaleString(); });
+document.getElementById('f-installs').addEventListener('input', function() { document.getElementById('installs-val').textContent = fmt(this.value); });
+document.getElementById('f-size_mb').addEventListener('input', function() { document.getElementById('size-val').textContent = this.value; });
+document.getElementById('f-days_since_update').addEventListener('input', function() { document.getElementById('days-val').textContent = this.value; });
+document.getElementById('f-min_android_ver').addEventListener('input', function() { document.getElementById('android-val').textContent = parseFloat(this.value).toFixed(1); });
+
+// Init displays
+document.getElementById('installs-val').textContent = fmt(document.getElementById('f-installs').value);
+document.getElementById('android-val').textContent = parseFloat(document.getElementById('f-min_android_ver').value).toFixed(1);
+
+// Price toggle
+document.getElementById('f-is_free').addEventListener('change', function() {
+    document.getElementById('price-field').style.display = this.value === '0' ? '' : 'none';
+});
+
+// Live prediction
+function getPayload() {
+    const isFree = document.getElementById('f-is_free').value;
+    return {
+        category:          document.getElementById('f-category').value,
+        reviews:           document.getElementById('f-reviews').value,
+        installs:          document.getElementById('f-installs').value,
+        size_mb:           document.getElementById('f-size_mb').value,
+        is_free:           isFree,
+        price:             isFree === '1' ? '0' : (document.getElementById('f-price').value || '0'),
+        content_rating:    document.getElementById('f-content_rating').value,
+        primary_genre:     document.getElementById('f-primary_genre').value,
+        days_since_update: document.getElementById('f-days_since_update').value,
+        min_android_ver:   parseFloat(document.getElementById('f-min_android_ver').value).toFixed(1),
+    };
+}
+
+function updateLive(r) {
+    const badge = document.getElementById('live-badge');
+    badge.textContent = r.label.toUpperCase();
+    badge.className = 'badge-anim lbl-' + r.label.toLowerCase();
+
+    document.getElementById('live-conf-text').textContent = r.confidence.toFixed(1) + '% confidence — ' + r.label;
+    const bar = document.getElementById('live-bar');
+    bar.style.width = r.confidence.toFixed(1) + '%';
+    bar.className = 'progress-fill ' + r.label.toLowerCase();
+
+    ['Good','Average','Poor'].forEach(cls => {
+        const pct = (r.probabilities[cls] * 100).toFixed(1);
+        document.getElementById('pct-' + cls).textContent = pct + '%';
+        document.getElementById('bar-' + cls).style.width = pct + '%';
     });
-    {% endif %}
+    document.getElementById('live-spinner').style.display = 'none';
+}
+
+const livePredict = debounce(function() {
+    document.getElementById('live-spinner').style.display = '';
+    fetch('/api/predict', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(getPayload()) })
+    .then(r => r.json())
+    .then(d => { if (!d.error) updateLive(d); else document.getElementById('live-spinner').style.display = 'none'; })
+    .catch(() => { document.getElementById('live-spinner').style.display = 'none'; });
+}, 350);
+
+['f-category','f-content_rating','f-primary_genre','f-is_free','f-price',
+ 'f-reviews','f-installs','f-size_mb','f-days_since_update','f-min_android_ver'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', livePredict);
+    el.addEventListener('change', livePredict);
+});
+
+livePredict();
+
+{% if result %}
+document.getElementById('live-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+const dCtx = document.getElementById('doughnut').getContext('2d');
+new Chart(dCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Poor','Average','Good'],
+        datasets: [{ data: [{{ result.probabilities.Poor }},{{ result.probabilities.Average }},{{ result.probabilities.Good }}], backgroundColor: ['rgba(248,81,73,0.8)','rgba(210,153,34,0.8)','rgba(63,185,80,0.8)'], borderWidth: 2, borderColor: '#161b22' }]
+    },
+    options: {
+        cutout: '68%', responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.label + ': ' + (c.parsed*100).toFixed(1) + '%' }, backgroundColor:'#21262d', borderColor:'#30363d', borderWidth:1, titleColor:'#e6edf3', bodyColor:'#768390' } }
+    }
+});
+{% endif %}
 </script>
 {% endblock %}

@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}AI App Advisor{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb"><a href="/">Home</a><span>›</span>AI Advisor</div>
+    <h1>AI App Advisor</h1>
+    <p>Enter your app's details — the ML model predicts its class, then Llama 3.1 generates a personalised improvement report.</p>
+</div>
+
+<div class="two-col">
+
+    <!-- LEFT: Form -->
+    <div class="card">
+        <div class="card-title">App Details</div>
+        <form method="POST" action="/advisor" id="advisor-form">
+
+            <div class="form-group">
+                <label>Category</label>
+                <select name="category" required>
+                    {% for cat in categories %}
+                        <option value="{{ cat }}" {% if form_data.get('category') == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Number of Reviews</label>
+                <input type="number" name="reviews" min="0" required
+                       value="{{ form_data.get('reviews', '') }}" placeholder="e.g. 5000">
+            </div>
+
+            <div class="form-group">
+                <label>Installs</label>
+                <select name="installs" required>
+                    {% set install_options = [
+                        (1000,'1K'),(5000,'5K'),(10000,'10K'),(50000,'50K'),
+                        (100000,'100K'),(500000,'500K'),(1000000,'1M'),(5000000,'5M'),
+                        (10000000,'10M'),(50000000,'50M'),(100000000,'100M'),
+                        (500000000,'500M'),(1000000000,'1B')
+                    ] %}
+                    {% for val, lbl in install_options %}
+                        <option value="{{ val }}" {% if form_data.get('installs')|string == val|string %}selected{% endif %}>{{ lbl }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>App Size (MB)</label>
+                <input type="number" name="size_mb" min="0" step="0.1" required
+                       value="{{ form_data.get('size_mb', '') }}" placeholder="e.g. 25.5">
+            </div>
+
+            <div class="form-group">
+                <label>Type</label>
+                <select name="is_free" id="is_free" required>
+                    <option value="1" {% if form_data.get('is_free')|string != '0' %}selected{% endif %}>Free</option>
+                    <option value="0" {% if form_data.get('is_free')|string == '0' %}selected{% endif %}>Paid</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="price-field" style="{% if form_data.get('is_free')|string != '0' %}display:none{% endif %}">
+                <label>Price (USD)</label>
+                <input type="number" name="price" min="0" step="0.01"
+                       value="{{ form_data.get('price', '') }}" placeholder="e.g. 1.99">
+            </div>
+
+            <div class="form-group">
+                <label>Content Rating</label>
+                <select name="content_rating" required>
+                    {% for cr in content_ratings %}
+                        <option value="{{ cr }}" {% if form_data.get('content_rating') == cr %}selected{% endif %}>{{ cr }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Primary Genre</label>
+                <select name="primary_genre" required>
+                    {% for pg in primary_genres %}
+                        <option value="{{ pg }}" {% if form_data.get('primary_genre') == pg %}selected{% endif %}>{{ pg }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Days Since Last Update</label>
+                <input type="number" name="days_since_update" min="0" required
+                       value="{{ form_data.get('days_since_update', '') }}" placeholder="e.g. 30">
+            </div>
+
+            <div class="form-group">
+                <label>Min Android Version</label>
+                <input type="number" name="min_android_ver" min="1.0" step="0.1" required
+                       value="{{ form_data.get('min_android_ver', '') }}" placeholder="e.g. 4.1">
+            </div>
+
+            <button type="submit" class="btn-primary full" id="submit-btn" style="margin-top:0.5rem;">
+                <span id="btn-text">Generate AI Report</span>
+                <svg id="btn-spinner" style="display:none;animation:spin 1s linear infinite;width:16px;height:16px;margin-left:6px;" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"></circle>
+                    <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <!-- RIGHT: Results -->
+    <div id="result-col">
+        {% if prediction and ai_report %}
+
+        <!-- Prediction badge -->
+        <div class="card" style="text-align:center;margin-bottom:1.25rem;">
+            {% if prediction.label == 'Good' %}
+                <div class="badge-anim lbl-good" style="margin-bottom:0.75rem;">GOOD</div>
+            {% elif prediction.label == 'Average' %}
+                <div class="badge-anim lbl-average" style="margin-bottom:0.75rem;">AVERAGE</div>
+            {% else %}
+                <div class="badge-anim lbl-poor" style="margin-bottom:0.75rem;">POOR</div>
+            {% endif %}
+            <p style="color:var(--muted);margin:0;font-size:0.9rem;">
+                ML model is <strong style="color:var(--text);">{{ "%.1f"|format(prediction.confidence) }}%</strong> confident
+            </p>
+        </div>
+
+        <!-- AI Report -->
+        <div class="card" id="ai-report-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.5rem;">
+                <div class="card-title" style="margin:0;">AI Improvement Report</div>
+                <span style="font-size:0.72rem;color:var(--muted);background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);padding:3px 10px;border-radius:999px;">
+                    Powered by NVIDIA NIM · Llama 3.1 70B
+                </span>
+            </div>
+
+            {% set sections = {'Quick Wins': [], 'Strategic Improvements': [], 'Risk Factors': []} %}
+            {% set current = [None] %}
+            {% for line in ai_report.split('\n') %}
+                {% if 'Quick Wins' in line %}
+                    {% set _ = current.__setitem__(0, 'Quick Wins') %}
+                {% elif 'Strategic Improvements' in line %}
+                    {% set _ = current.__setitem__(0, 'Strategic Improvements') %}
+                {% elif 'Risk Factors' in line %}
+                    {% set _ = current.__setitem__(0, 'Risk Factors') %}
+                {% elif line.strip().startswith('-') and current[0] %}
+                    {% set _ = sections[current[0]].append(line.strip()[1:].strip()) %}
+                {% endif %}
+            {% endfor %}
+
+            <!-- Quick Wins -->
+            <div class="rec-card accent-green" style="margin-bottom:1rem;">
+                <div style="margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">Quick Wins</h3>
+                </div>
+                {% if sections['Quick Wins'] %}
+                    <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:0.875rem;line-height:1.7;">
+                        {% for bullet in sections['Quick Wins'] %}<li>{{ bullet }}</li>{% endfor %}
+                    </ul>
+                {% else %}
+                    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No specific quick wins identified.</p>
+                {% endif %}
+            </div>
+
+            <!-- Strategic Improvements -->
+            <div class="rec-card accent-blue" style="margin-bottom:1rem;">
+                <div style="margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">Strategic Improvements</h3>
+                </div>
+                {% if sections['Strategic Improvements'] %}
+                    <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:0.875rem;line-height:1.7;">
+                        {% for bullet in sections['Strategic Improvements'] %}<li>{{ bullet }}</li>{% endfor %}
+                    </ul>
+                {% else %}
+                    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No specific strategic improvements identified.</p>
+                {% endif %}
+            </div>
+
+            <!-- Risk Factors -->
+            <div class="rec-card accent-red">
+                <div style="margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">Risk Factors</h3>
+                </div>
+                {% if sections['Risk Factors'] %}
+                    <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:0.875rem;line-height:1.7;">
+                        {% for bullet in sections['Risk Factors'] %}<li>{{ bullet }}</li>{% endfor %}
+                    </ul>
+                {% else %}
+                    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No specific risk factors identified.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% else %}
+        <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:320px;gap:1rem;">
+            <p style="font-size:1rem;font-weight:600;color:var(--muted);margin:0;">No report yet</p>
+            <p style="font-size:0.875rem;color:var(--muted);margin:0;max-width:280px;">Fill in your app's details and click <strong style="color:var(--text);">Generate AI Report</strong> to receive a personalised improvement plan.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+<script>
+    document.getElementById('is_free').addEventListener('change', function() {
+        document.getElementById('price-field').style.display = this.value === '0' ? '' : 'none';
+    });
+    document.getElementById('advisor-form').addEventListener('submit', function() {
+        document.getElementById('btn-text').textContent = 'Analysing…';
+        document.getElementById('btn-spinner').style.display = 'inline-block';
+        document.getElementById('submit-btn').disabled = true;
+    });
+    {% if prediction %}
+    document.getElementById('result-col').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    {% endif %}
+</script>
+{% endblock %}
