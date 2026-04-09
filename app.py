@@ -185,49 +185,6 @@ def logout():
     return resp
 
 
-@app.route("/predictor", methods=["GET", "POST"])
-@token_required
-def predictor_page():
-    categories = sorted(predictor.category_map.keys())
-    content_ratings = sorted(predictor.content_rating_map.keys())
-    primary_genres = sorted(predictor.primary_genre_map.keys())
-
-    if request.method == "POST":
-        form_data = {
-            "category": request.form.get("category", ""),
-            "reviews": request.form.get("reviews", 0),
-            "installs": request.form.get("installs", 0),
-            "size_mb": request.form.get("size_mb", 0.0),
-            "is_free": request.form.get("is_free", 1),
-            "price": request.form.get("price", 0.0),
-            "content_rating": request.form.get("content_rating", ""),
-            "primary_genre": request.form.get("primary_genre", ""),
-            "days_since_update": request.form.get("days_since_update", 0),
-            "min_android_ver": request.form.get("min_android_ver", 1.0),
-        }
-        result = predictor.predict(form_data)
-        if "error" in result:
-            flash(result["error"])
-            return redirect("/predictor")
-        return render_template(
-            "predictor.html",
-            categories=categories,
-            content_ratings=content_ratings,
-            primary_genres=primary_genres,
-            result=result,
-            form_data=form_data,
-        )
-
-    return render_template(
-        "predictor.html",
-        categories=categories,
-        content_ratings=content_ratings,
-        primary_genres=primary_genres,
-        result=None,
-        form_data={},
-    )
-
-
 
 @app.route("/compare")
 @token_required
@@ -241,6 +198,7 @@ def compare():
         content_ratings=content_ratings,
         primary_genres=primary_genres,
     )
+
 
 
 @app.route("/api/predict", methods=["POST"])
