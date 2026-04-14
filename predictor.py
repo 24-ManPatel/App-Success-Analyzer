@@ -33,6 +33,43 @@ with open(os.path.join(_dir, "model", "lgbm_feature_importance.json")) as f:
 
 _LABEL_MAP = {0: "Poor", 1: "Average", 2: "Good"}
 
+# Auto-derive primary_genre from category when not explicitly supplied
+_CATEGORY_TO_GENRE = {
+    "ART_AND_DESIGN":      "Art & Design",
+    "AUTO_AND_VEHICLES":   "Auto & Vehicles",
+    "BEAUTY":              "Beauty",
+    "BOOKS_AND_REFERENCE": "Books & Reference",
+    "BUSINESS":            "Business",
+    "COMICS":              "Comics",
+    "COMMUNICATION":       "Communication",
+    "DATING":              "Dating",
+    "EDUCATION":           "Education",
+    "ENTERTAINMENT":       "Entertainment",
+    "EVENTS":              "Events",
+    "FAMILY":              "Casual",
+    "FINANCE":             "Finance",
+    "FOOD_AND_DRINK":      "Food & Drink",
+    "GAME":                "Casual",
+    "HEALTH_AND_FITNESS":  "Health & Fitness",
+    "HOUSE_AND_HOME":      "House & Home",
+    "LIBRARIES_AND_DEMO":  "Libraries & Demo",
+    "LIFESTYLE":           "Lifestyle",
+    "MAPS_AND_NAVIGATION": "Maps & Navigation",
+    "MEDICAL":             "Medical",
+    "NEWS_AND_MAGAZINES":  "News & Magazines",
+    "PARENTING":           "Parenting",
+    "PERSONALIZATION":     "Personalization",
+    "PHOTOGRAPHY":         "Photography",
+    "PRODUCTIVITY":        "Productivity",
+    "SHOPPING":            "Shopping",
+    "SOCIAL":              "Social",
+    "SPORTS":              "Sports",
+    "TOOLS":               "Tools",
+    "TRAVEL_AND_LOCAL":    "Travel & Local",
+    "VIDEO_PLAYERS":       "Video Players & Editors",
+    "WEATHER":             "Weather",
+}
+
 _HUMAN_LABELS = {
     "Category_Enc":      "Category",
     "Log_Reviews":       "Number of Reviews",
@@ -64,10 +101,11 @@ def _encode(form_data: dict):
         cr_enc = content_rating_map[form_data["content_rating"]]
     except KeyError:
         return None, f"Unknown content rating: {form_data['content_rating']}"
+    pg_raw = form_data.get("primary_genre") or _CATEGORY_TO_GENRE.get(form_data.get("category", ""), "Tools")
     try:
-        pg_enc = primary_genre_map[form_data["primary_genre"]]
+        pg_enc = primary_genre_map[pg_raw]
     except KeyError:
-        return None, f"Unknown primary genre: {form_data['primary_genre']}"
+        pg_enc = 0  # fallback to first encoded value
 
     price_raw = form_data.get("price", "") or "0"
     fv = {

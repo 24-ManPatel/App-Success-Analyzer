@@ -186,19 +186,124 @@ def logout():
 
 
 
-@app.route("/compare")
+@app.route("/blueprint")
 @token_required
-def compare():
-    categories = sorted(predictor.category_map.keys())
-    content_ratings = sorted(predictor.content_rating_map.keys())
-    primary_genres = sorted(predictor.primary_genre_map.keys())
-    return render_template(
-        "compare.html",
-        categories=categories,
-        content_ratings=content_ratings,
-        primary_genres=primary_genres,
-    )
+def blueprint():
+    return render_template("blueprint.html")
 
+
+@app.route("/api/blueprint", methods=["POST"])
+@token_required
+def api_blueprint():
+    import json as _json
+    try:
+        data = request.get_json(force=True)
+        idea = (data.get("idea") or "").strip()
+        if len(idea) < 10:
+            return jsonify({"error": "Please describe your app idea in more detail."}), 400
+
+        categories_list    = sorted(predictor.category_map.keys())
+        content_ratings_list = sorted(predictor.content_rating_map.keys())
+
+        # ── Step 1: extract structured profile from natural language ──
+        extract_prompt = (
+            f'App idea: "{idea}"\n\n'
+            f'Return ONLY a valid JSON object — no explanation, no markdown fences:\n'
+            f'{{\n'
+            f'  "app_name": "short catchy name",\n'
+            f'  "tagline": "one sentence value proposition",\n'
+            f'  "category": "one of: {", ".join(categories_list)}",\n'
+            f'  "content_rating": "one of: {", ".join(content_ratings_list)}",\n'
+            f'  "is_free": true or false,\n'
+            f'  "estimated_installs": integer — estimate for a successfully launched, growing app; choose from (100000,500000,1000000,5000000,10000000) — do NOT go below 100000,\n'
+            f'  "estimated_size_mb": number 1-500,\n'
+            f'  "estimated_price": number (0 if free),\n'
+            f'  "estimated_reviews": integer,\n'
+            f'  "days_since_update": integer 1-365,\n'
+            f'  "min_android_ver": number 4.0-10.0,\n'
+            f'  "market_segment": "2-3 word segment",\n'
+            f'  "target_audience": "brief audience description"\n'
+            f'}}'
+        )
+
+        ext_resp = nvidia_client.chat.completions.create(
+            model="meta/llama-3.1-70b-instruct",
+            messages=[
+                {"role": "system", "content": "You are a mobile app analyst. Extract structured data from app descriptions. Return only valid JSON."},
+                {"role": "user",   "content": extract_prompt},
+            ],
+            temperature=0.2,
+            max_tokens=450,
+        )
+
+        raw = ext_resp.choices[0].message.content.strip()
+        # strip markdown fences if model wraps in ```json ... ```
+        if "```" in raw:
+            for part in raw.split("```"):
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    raw = part
+                    break
+        extracted = _json.loads(raw)
+
+        # Sanitise against known maps
+        if extracted.get("category") not in predictor.category_map:
+            extracted["category"] = categories_list[0]
+        if extracted.get("content_rating") not in predictor.content_rating_map:
+            extracted["content_rating"] = content_ratings_list[0]
+
+        # ── Step 2: run all 3 ML models ──
+        form_data = {
+            "category":          extracted["category"],
+            "content_rating":    extracted["content_rating"],
+            "is_free":           "1" if extracted.get("is_free", True) else "0",
+            "reviews":           str(max(0,      int(extracted.get("estimated_reviews",  50000)))),
+            "installs":          str(max(100000, int(extracted.get("estimated_installs", 500000)))),
+            "size_mb":           str(max(1.0,  float(extracted.get("estimated_size_mb", 25)))),
+            "price":             str(float(extracted.get("estimated_price", 0))),
+            "days_since_update": str(max(1,   int(extracted.get("days_since_update",  90)))),
+            "min_android_ver":   f"{float(extracted.get('min_android_ver', 5.0)):.1f}",
+        }
+        predictions = predictor.predict_all(form_data)
+
+        # ── Step 3: market analysis ──
+        main = predictions["xgb"]
+        analysis_prompt = (
+            f'App: {extracted.get("app_name","Unnamed")}\n'
+            f'Concept: {idea}\n'
+            f'Category: {extracted["category"]} | Audience: {extracted.get("target_audience","")}\n'
+            f'ML Prediction: {main["label"]} ({main["confidence"]:.1f}% confidence)\n'
+            f'Probabilities — Good {main["probabilities"]["Good"]*100:.1f}%, '
+            f'Average {main["probabilities"]["Average"]*100:.1f}%, '
+            f'Poor {main["probabilities"]["Poor"]*100:.1f}%\n\n'
+            f'Write a structured analysis with EXACTLY these five sections. Each section: 2-3 bullet points starting with -.\n'
+            f'For Development Timeline: 5-6 phases totalling 16–32 weeks. Each bullet format: "Phase N — Name: X–Y weeks — brief description". Keep total timeline realistic for a small indie team.\n'
+            f'For Cost Estimate: assume a small indie team or freelancers in India/Southeast Asia with a very tight budget. Use LOW realistic ranges. Each bullet format: "Category: $X – $Y". Include a final bullet "Total estimate: $X – $Y". Typical total MUST stay between $500–$4,000 USD. Do not exceed $4,000 total under any circumstances.\n\n'
+            f'### Market Opportunity\n### Competitive Landscape\n### Launch Strategy\n### Development Timeline\n### Cost Estimate'
+        )
+
+        ana_resp = nvidia_client.chat.completions.create(
+            model="meta/llama-3.1-70b-instruct",
+            messages=[
+                {"role": "system", "content": "You are a senior mobile app market strategist and project estimator. Be specific, data-driven, and actionable."},
+                {"role": "user",   "content": analysis_prompt},
+            ],
+            temperature=0.65,
+            max_tokens=1100,
+        )
+
+        return jsonify({
+            "extracted":   extracted,
+            "predictions": predictions,
+            "analysis":    ana_resp.choices[0].message.content,
+        })
+
+    except _json.JSONDecodeError:
+        return jsonify({"error": "Could not parse the app profile — try describing your idea with more specific details."}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/predict", methods=["POST"])
@@ -226,12 +331,10 @@ def api_predict_all():
 def arena():
     categories      = sorted(predictor.category_map.keys())
     content_ratings = sorted(predictor.content_rating_map.keys())
-    primary_genres  = sorted(predictor.primary_genre_map.keys())
     return render_template(
         "arena.html",
         categories=categories,
         content_ratings=content_ratings,
-        primary_genres=primary_genres,
         model_meta=predictor.MODEL_META,
     )
 
@@ -241,7 +344,6 @@ def arena():
 def advisor():
     categories      = sorted(predictor.category_map.keys())
     content_ratings = sorted(predictor.content_rating_map.keys())
-    primary_genres  = sorted(predictor.primary_genre_map.keys())
 
     if request.method == "POST":
         form_data = {
@@ -252,7 +354,6 @@ def advisor():
             "is_free":           request.form.get("is_free", 1),
             "price":             request.form.get("price", "") or "0",
             "content_rating":    request.form.get("content_rating", ""),
-            "primary_genre":     request.form.get("primary_genre", ""),
             "days_since_update": request.form.get("days_since_update", 0),
             "min_android_ver":   request.form.get("min_android_ver", 1.0),
         }
@@ -272,7 +373,6 @@ def advisor():
             f"- Free: {'Yes' if str(form_data['is_free']) == '1' else 'No'}\n"
             f"- Price (USD): {form_data['price']}\n"
             f"- Content Rating: {form_data['content_rating']}\n"
-            f"- Primary Genre: {form_data['primary_genre']}\n"
             f"- Days Since Last Update: {form_data['days_since_update']}\n"
             f"- Min Android Version: {form_data['min_android_ver']}\n\n"
             f"ML Prediction: {prediction['label']} (confidence {prediction['confidence']:.1f}%)\n"
@@ -303,7 +403,6 @@ def advisor():
             "advisor.html",
             categories=categories,
             content_ratings=content_ratings,
-            primary_genres=primary_genres,
             prediction=prediction,
             ai_report=ai_report,
             form_data=form_data,
@@ -313,7 +412,6 @@ def advisor():
         "advisor.html",
         categories=categories,
         content_ratings=content_ratings,
-        primary_genres=primary_genres,
         prediction=None,
         ai_report=None,
         form_data={},

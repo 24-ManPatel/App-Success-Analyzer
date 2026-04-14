@@ -21,19 +21,11 @@
             </select>
         </div>
 
-        <div class="grid-2">
-            <div class="form-group">
-                <label>Content Rating</label>
-                <select id="a-content_rating">
-                    {% for cr in content_ratings %}<option value="{{ cr }}">{{ cr }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Primary Genre</label>
-                <select id="a-primary_genre">
-                    {% for pg in primary_genres %}<option value="{{ pg }}">{{ pg }}</option>{% endfor %}
-                </select>
-            </div>
+        <div class="form-group">
+            <label>Content Rating</label>
+            <select id="a-content_rating">
+                {% for cr in content_ratings %}<option value="{{ cr }}">{{ cr }}</option>{% endfor %}
+            </select>
         </div>
 
         <div class="grid-2">
@@ -183,7 +175,6 @@ function getPayload() {
         is_free:           isFree,
         price:             isFree==='1' ? '0' : (document.getElementById('a-price').value || '0'),
         content_rating:    document.getElementById('a-content_rating').value,
-        primary_genre:     document.getElementById('a-primary_genre').value,
         days_since_update: document.getElementById('a-days_since_update').value,
         min_android_ver:   parseFloat(document.getElementById('a-min_android_ver').value).toFixed(1),
     };
@@ -251,7 +242,7 @@ const liveArena = debounce(function() {
     .catch(() => { toast('Network error.'); document.getElementById('a-status').textContent=''; });
 }, 350);
 
-['a-category','a-content_rating','a-primary_genre','a-is_free','a-price',
+['a-category','a-content_rating','a-is_free','a-price',
  'a-reviews','a-installs','a-size_mb','a-days_since_update','a-min_android_ver'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener('input', liveArena);

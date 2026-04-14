@@ -5,14 +5,18 @@
 <div class="page-header">
     <div class="breadcrumb"><a href="/">Home</a><span>›</span>AI Advisor</div>
     <h1>AI App Advisor</h1>
-    <p>Enter your app's details — the ML model predicts its class, then Llama 3.1 generates a personalised improvement report.</p>
+    <p>Enter your app's details — the ML model predicts success, then AppLy AI generates a personalised improvement report.</p>
 </div>
 
-<div class="two-col">
+<div class="two-col" style="align-items:start;">
 
-    <!-- LEFT: Form -->
-    <div class="card">
-        <div class="card-title">App Details</div>
+    <!-- ── LEFT: Sticky form ── -->
+    <div class="card adv-form-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem;">
+            <div class="card-title" style="margin:0;">App Details</div>
+            <span style="font-size:0.65rem;font-weight:700;color:#58a6ff;background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.25);padding:2px 9px;border-radius:999px;">✦ AppLy AI</span>
+        </div>
+
         <form method="POST" action="/advisor" id="advisor-form">
 
             <div class="form-group">
@@ -24,48 +28,50 @@
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>Number of Reviews</label>
-                <input type="number" name="reviews" min="0" required
-                       value="{{ form_data.get('reviews', '') }}" placeholder="e.g. 5000">
+            <div class="grid-2">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Reviews</label>
+                    <input type="number" name="reviews" min="0" required
+                           value="{{ form_data.get('reviews', '') }}" placeholder="e.g. 5000">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Installs</label>
+                    <select name="installs" required>
+                        {% set install_options = [
+                            (1000,'1K'),(5000,'5K'),(10000,'10K'),(50000,'50K'),
+                            (100000,'100K'),(500000,'500K'),(1000000,'1M'),(5000000,'5M'),
+                            (10000000,'10M'),(50000000,'50M'),(100000000,'100M'),
+                            (500000000,'500M'),(1000000000,'1B')
+                        ] %}
+                        {% for val, lbl in install_options %}
+                            <option value="{{ val }}" {% if form_data.get('installs')|string == val|string %}selected{% endif %}>{{ lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>Installs</label>
-                <select name="installs" required>
-                    {% set install_options = [
-                        (1000,'1K'),(5000,'5K'),(10000,'10K'),(50000,'50K'),
-                        (100000,'100K'),(500000,'500K'),(1000000,'1M'),(5000000,'5M'),
-                        (10000000,'10M'),(50000000,'50M'),(100000000,'100M'),
-                        (500000000,'500M'),(1000000000,'1B')
-                    ] %}
-                    {% for val, lbl in install_options %}
-                        <option value="{{ val }}" {% if form_data.get('installs')|string == val|string %}selected{% endif %}>{{ lbl }}</option>
-                    {% endfor %}
-                </select>
+            <div class="grid-2" style="margin-top:0.875rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>App Size (MB)</label>
+                    <input type="number" name="size_mb" min="0" step="0.1" required
+                           value="{{ form_data.get('size_mb', '') }}" placeholder="e.g. 25.5">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Type</label>
+                    <select name="is_free" id="is_free" required>
+                        <option value="1" {% if form_data.get('is_free')|string != '0' %}selected{% endif %}>Free</option>
+                        <option value="0" {% if form_data.get('is_free')|string == '0' %}selected{% endif %}>Paid</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>App Size (MB)</label>
-                <input type="number" name="size_mb" min="0" step="0.1" required
-                       value="{{ form_data.get('size_mb', '') }}" placeholder="e.g. 25.5">
-            </div>
-
-            <div class="form-group">
-                <label>Type</label>
-                <select name="is_free" id="is_free" required>
-                    <option value="1" {% if form_data.get('is_free')|string != '0' %}selected{% endif %}>Free</option>
-                    <option value="0" {% if form_data.get('is_free')|string == '0' %}selected{% endif %}>Paid</option>
-                </select>
-            </div>
-
-            <div class="form-group" id="price-field" style="{% if form_data.get('is_free')|string != '0' %}display:none{% endif %}">
+            <div class="form-group" id="price-field" style="margin-top:0.875rem;{% if form_data.get('is_free')|string != '0' %}display:none{% endif %}">
                 <label>Price (USD)</label>
                 <input type="number" name="price" min="0" step="0.01"
                        value="{{ form_data.get('price', '') }}" placeholder="e.g. 1.99">
             </div>
 
-            <div class="form-group">
+            <div class="form-group" style="margin-top:0.875rem;">
                 <label>Content Rating</label>
                 <select name="content_rating" required>
                     {% for cr in content_ratings %}
@@ -74,62 +80,70 @@
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>Primary Genre</label>
-                <select name="primary_genre" required>
-                    {% for pg in primary_genres %}
-                        <option value="{{ pg }}" {% if form_data.get('primary_genre') == pg %}selected{% endif %}>{{ pg }}</option>
-                    {% endfor %}
-                </select>
+            <div class="grid-2" style="margin-top:0.875rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Days Since Update</label>
+                    <input type="number" name="days_since_update" min="0" required
+                           value="{{ form_data.get('days_since_update', '') }}" placeholder="e.g. 30">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Min Android Ver.</label>
+                    <input type="number" name="min_android_ver" min="1.0" step="0.1" required
+                           value="{{ form_data.get('min_android_ver', '') }}" placeholder="e.g. 4.1">
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>Days Since Last Update</label>
-                <input type="number" name="days_since_update" min="0" required
-                       value="{{ form_data.get('days_since_update', '') }}" placeholder="e.g. 30">
-            </div>
-
-            <div class="form-group">
-                <label>Min Android Version</label>
-                <input type="number" name="min_android_ver" min="1.0" step="0.1" required
-                       value="{{ form_data.get('min_android_ver', '') }}" placeholder="e.g. 4.1">
-            </div>
-
-            <button type="submit" class="btn-primary full" id="submit-btn" style="margin-top:0.5rem;">
+            <button type="submit" class="btn-primary full" id="submit-btn" style="margin-top:1.1rem;background:linear-gradient(135deg,#58a6ff,#8b78e6);border:none;">
                 <span id="btn-text">Generate AI Report</span>
-                <svg id="btn-spinner" style="display:none;animation:spin 1s linear infinite;width:16px;height:16px;margin-left:6px;" fill="none" viewBox="0 0 24 24">
+                <svg id="btn-spinner" style="display:none;animation:spin 1s linear infinite;width:15px;height:15px;" fill="none" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"></circle>
                     <path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8v8H4z"></path>
                 </svg>
             </button>
+
         </form>
     </div>
 
-    <!-- RIGHT: Results -->
+    <!-- ── RIGHT: Results ── -->
     <div id="result-col">
         {% if prediction and ai_report %}
 
-        <!-- Prediction badge -->
-        <div class="card" style="text-align:center;margin-bottom:1.25rem;">
-            {% if prediction.label == 'Good' %}
-                <div class="badge-anim lbl-good" style="margin-bottom:0.75rem;">GOOD</div>
-            {% elif prediction.label == 'Average' %}
-                <div class="badge-anim lbl-average" style="margin-bottom:0.75rem;">AVERAGE</div>
-            {% else %}
-                <div class="badge-anim lbl-poor" style="margin-bottom:0.75rem;">POOR</div>
-            {% endif %}
-            <p style="color:var(--muted);margin:0;font-size:0.9rem;">
-                ML model is <strong style="color:var(--text);">{{ "%.1f"|format(prediction.confidence) }}%</strong> confident
-            </p>
+        <!-- Prediction card -->
+        <div class="card" style="margin-bottom:1.1rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+                <div>
+                    {% if prediction.label == 'Good' %}
+                        <div class="badge-anim lbl-good" style="font-size:1.25rem;padding:0.4rem 1.5rem;margin-bottom:0.4rem;">GOOD</div>
+                    {% elif prediction.label == 'Average' %}
+                        <div class="badge-anim lbl-average" style="font-size:1.25rem;padding:0.4rem 1.5rem;margin-bottom:0.4rem;">AVERAGE</div>
+                    {% else %}
+                        <div class="badge-anim lbl-poor" style="font-size:1.25rem;padding:0.4rem 1.5rem;margin-bottom:0.4rem;">POOR</div>
+                    {% endif %}
+                    <p style="color:var(--muted);margin:0;font-size:0.8rem;">
+                        <strong style="color:var(--text);">{{ "%.1f"|format(prediction.confidence) }}%</strong> model confidence
+                    </p>
+                </div>
+                <!-- Probability breakdown -->
+                <div style="flex:1;min-width:160px;max-width:240px;">
+                    {% set probs = [('Good', prediction.probabilities.Good, 'var(--success)'), ('Average', prediction.probabilities.Average, 'var(--warning)'), ('Poor', prediction.probabilities.Poor, 'var(--danger)')] %}
+                    {% for label, prob, color in probs %}
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
+                        <span style="font-size:0.65rem;color:var(--muted);width:46px;text-align:right;flex-shrink:0;">{{ label }}</span>
+                        <div class="progress-track" style="flex:1;">
+                            <div class="progress-fill" style="width:{{ (prob * 100)|round(1) }}%;background:{{ color }};"></div>
+                        </div>
+                        <span style="font-size:0.65rem;font-weight:700;color:{{ color }};width:34px;font-variant-numeric:tabular-nums;">{{ "%.1f"|format(prob * 100) }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
         <!-- AI Report -->
-        <div class="card" id="ai-report-card">
+        <div class="card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.5rem;">
                 <div class="card-title" style="margin:0;">AI Improvement Report</div>
-                <span style="font-size:0.72rem;color:var(--muted);background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);padding:3px 10px;border-radius:999px;">
-                    Powered by NVIDIA NIM · Llama 3.1 70B
-                </span>
+                <span style="font-size:0.65rem;font-weight:700;color:#58a6ff;background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.25);padding:2px 9px;border-radius:999px;">✦ AppLy AI</span>
             </div>
 
             {% set sections = {'Quick Wins': [], 'Strategic Improvements': [], 'Risk Factors': []} %}
@@ -146,60 +160,63 @@
                 {% endif %}
             {% endfor %}
 
-            <!-- Quick Wins -->
-            <div class="rec-card accent-green" style="margin-bottom:1rem;">
-                <div style="margin-bottom:0.75rem;">
-                    <h3 style="margin:0;">Quick Wins</h3>
-                </div>
-                {% if sections['Quick Wins'] %}
-                    <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:0.875rem;line-height:1.7;">
-                        {% for bullet in sections['Quick Wins'] %}<li>{{ bullet }}</li>{% endfor %}
-                    </ul>
-                {% else %}
-                    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No specific quick wins identified.</p>
-                {% endif %}
-            </div>
+            {% set report_sections = [
+                ('Quick Wins',            sections['Quick Wins'],            'accent-green', 'var(--success)', '⚡'),
+                ('Strategic Improvements',sections['Strategic Improvements'],'accent-blue',  '#58a6ff',        '🎯'),
+                ('Risk Factors',          sections['Risk Factors'],          'accent-red',   'var(--danger)',   '⚠️'),
+            ] %}
 
-            <!-- Strategic Improvements -->
-            <div class="rec-card accent-blue" style="margin-bottom:1rem;">
-                <div style="margin-bottom:0.75rem;">
-                    <h3 style="margin:0;">Strategic Improvements</h3>
+            {% for title, bullets, accent, color, icon in report_sections %}
+            <div class="rec-card {{ accent }}" style="margin-bottom:{% if not loop.last %}1rem{% else %}0{% endif %};">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                    <span style="font-size:1rem;">{{ icon }}</span>
+                    <h3 style="margin:0;font-size:0.825rem;color:{{ color }};">{{ title }}</h3>
                 </div>
-                {% if sections['Strategic Improvements'] %}
-                    <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:0.875rem;line-height:1.7;">
-                        {% for bullet in sections['Strategic Improvements'] %}<li>{{ bullet }}</li>{% endfor %}
+                {% if bullets %}
+                    <ul style="margin:0;padding-left:1.1rem;color:var(--muted);font-size:0.825rem;line-height:1.75;">
+                        {% for bullet in bullets %}<li>{{ bullet }}</li>{% endfor %}
                     </ul>
                 {% else %}
-                    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No specific strategic improvements identified.</p>
+                    <p style="color:var(--muted-2);font-size:0.8rem;margin:0;">No specific items identified.</p>
                 {% endif %}
             </div>
+            {% endfor %}
 
-            <!-- Risk Factors -->
-            <div class="rec-card accent-red">
-                <div style="margin-bottom:0.75rem;">
-                    <h3 style="margin:0;">Risk Factors</h3>
-                </div>
-                {% if sections['Risk Factors'] %}
-                    <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:0.875rem;line-height:1.7;">
-                        {% for bullet in sections['Risk Factors'] %}<li>{{ bullet }}</li>{% endfor %}
-                    </ul>
-                {% else %}
-                    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No specific risk factors identified.</p>
-                {% endif %}
-            </div>
         </div>
 
         {% else %}
-        <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:320px;gap:1rem;">
-            <p style="font-size:1rem;font-weight:600;color:var(--muted);margin:0;">No report yet</p>
-            <p style="font-size:0.875rem;color:var(--muted);margin:0;max-width:280px;">Fill in your app's details and click <strong style="color:var(--text);">Generate AI Report</strong> to receive a personalised improvement plan.</p>
+
+        <!-- Empty state -->
+        <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:340px;gap:1rem;border-style:dashed;">
+            <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" style="color:var(--muted-2);opacity:0.6;">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+            </svg>
+            <div>
+                <p style="font-size:0.9rem;font-weight:600;color:var(--muted);margin:0 0 0.35rem;">No report yet</p>
+                <p style="font-size:0.8rem;color:var(--muted-2);margin:0;max-width:240px;line-height:1.6;">Fill in your app's details on the left and click <strong style="color:var(--text);">Generate AI Report</strong>.</p>
+            </div>
         </div>
+
         {% endif %}
     </div>
 
 </div>
 
-<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.adv-form-card {
+    position: sticky;
+    top: 64px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+.adv-form-card::-webkit-scrollbar       { width: 4px; }
+.adv-form-card::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+
 <script>
     document.getElementById('is_free').addEventListener('change', function() {
         document.getElementById('price-field').style.display = this.value === '0' ? '' : 'none';

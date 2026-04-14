@@ -18,7 +18,7 @@
             {% if request.cookies.get('jwt_token') %}
                 <a href="/"            class="nav-link {{ 'active' if request.path == '/' }}">Home</a>
                 <a href="/dashboard"   class="nav-link {{ 'active' if request.path == '/dashboard' }}">Dashboard</a>
-<a href="/compare"     class="nav-link {{ 'active' if request.path == '/compare' }}">Compare</a>
+                <a href="/blueprint"   class="nav-link {{ 'active' if request.path == '/blueprint' }}">App Blueprint</a>
                 <a href="/arena"       class="nav-link {{ 'active' if request.path == '/arena' }}">Model Arena</a>
                 <a href="/advisor"     class="nav-link {{ 'active' if request.path == '/advisor' }}">AI Advisor</a>
                 <a href="/model-report" class="nav-link {{ 'active' if request.path == '/model-report' }}">Model Report</a>
