@@ -1,15 +1,21 @@
-# Main Flask application file - Define routes, views, and application logic here
-# This file initializes the Flask app and handles all HTTP requests/responses
-from flask import Flask, render_template, request, redirect, session, flash, make_response, jsonify
+from flask import Flask, render_template, request, redirect, session, make_response, jsonify, url_for, flash
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import config
 import jwt
 import datetime
 import re
+import random
+import os
+import hashlib
 from functools import wraps
+from dotenv import load_dotenv
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 import predictor
 from openai import OpenAI
+
+load_dotenv()
 
 nvidia_client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
@@ -41,11 +47,69 @@ app.config.update(
 # MongoDB connection
 client = MongoClient(config.MONGO_URI)
 db = client[config.DB_NAME]
-users = db.users
+users         = db.users
 security_logs = db.security_logs
+otp_logs      = db.otp_logs          # MFA: stores hashed OTPs
 
-# Ensure unique email index
 users.create_index("email", unique=True)
+otp_logs.create_index("expires_at", expireAfterSeconds=0)  # TTL — auto-deletes expired OTPs
+
+
+# ── MFA helpers ─────────────────────────────────────────────────────────────────
+
+def send_otp_email(to_email: str, otp: str) -> bool:
+    """Send a 6-digit OTP via SendGrid. Returns True on success."""
+    api_key    = os.environ.get("SENDGRID_API_KEY")
+    from_email = os.environ.get("EMAIL_FROM")
+    if not api_key or not from_email:
+        app.logger.error("SENDGRID_API_KEY / EMAIL_FROM not set in environment.")
+        return False
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:32px;
+                border-radius:8px;border:1px solid #e2e8f0;background:#ffffff">
+        <h2 style="color:#1e293b;margin-bottom:8px">App Success Analyzer</h2>
+        <p style="color:#475569">Your one-time login code:</p>
+        <div style="font-size:36px;font-weight:700;letter-spacing:8px;
+                    color:#6366f1;padding:16px 0">{otp}</div>
+        <p style="color:#64748b;font-size:13px">
+            This code expires in <strong>2 minutes</strong>. Do not share it with anyone.
+        </p>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
+        <p style="color:#94a3b8;font-size:12px">
+            If you did not request this code, you can safely ignore this email.
+        </p>
+    </div>
+    """
+    try:
+        sg  = SendGridAPIClient(api_key)
+        msg = Mail(from_email=from_email, to_emails=to_email,
+                   subject="Your App Success Analyzer Login OTP", html_content=html_body)
+        resp = sg.send(msg)
+        return resp.status_code in (200, 201, 202)
+    except Exception as exc:
+        app.logger.error("SendGrid error: %s", exc)
+        return False
+
+
+def generate_otp() -> str:
+    return f"{random.SystemRandom().randint(0, 999999):06d}"
+
+
+def hash_otp(otp: str) -> str:
+    return hashlib.sha256(otp.encode()).hexdigest()
+
+
+def store_otp(email: str, otp: str) -> None:
+    now    = datetime.datetime.utcnow()
+    expiry = now + datetime.timedelta(minutes=2)
+    otp_logs.delete_many({"email": email})
+    otp_logs.insert_one({
+        "email":      email,
+        "otp_hash":   hash_otp(otp),
+        "attempts":   0,
+        "created_at": now,
+        "expires_at": expiry,
+    })
 
 def token_required(f):
     @wraps(f)
@@ -124,50 +188,117 @@ def login():
 
         if not email or not password:
             return render_template("login.html", error="Email and password are required.")
-            
+
         ip_addr = request.remote_addr
-        
+
         # Brute-force protection: check failed attempts in last 15 mins
         fifteen_mins_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
         recent_failures = security_logs.count_documents({
-            "ip": ip_addr,
+            "ip":        ip_addr,
             "timestamp": {"$gt": fifteen_mins_ago},
-            "success": False
+            "event":     "login_fail",
         })
-        
+
         if recent_failures >= 5:
             return render_template("login.html", error="Too many failed login attempts. Please try again later.")
 
         user = users.find_one({"email": email})
 
-        # Securely verify password
         if user and check_password_hash(user["password"], password):
-            # Update last login
-            now = datetime.datetime.utcnow()
-            users.update_one({"_id": user["_id"]}, {"$set": {"last_login": now}})
-            
-            # Log successful login
-            security_logs.insert_one({"ip": ip_addr, "email": email, "timestamp": now, "success": True})
-            
-            # Generate JWT Token (valid for 1 hour)
-            payload = {
-                "user_id": str(user["_id"]),
-                "email": user["email"],
-                "exp": now + datetime.timedelta(hours=1)
-            }
-            token = jwt.encode(payload, app.secret_key, algorithm="HS256")
-            
-            # Create response and set HTTPOnly Cookie
-            resp = make_response(redirect("/"))
-            resp.set_cookie("jwt_token", token, httponly=True, secure=True, samesite="Lax")
-            return resp
+            # Credentials correct — start MFA flow
+            otp = generate_otp()
+            store_otp(email, otp)
+
+            sent = send_otp_email(email, otp)
+            if not sent:
+                return render_template("login.html", error="Could not send verification email. Please try again.")
+
+            # Store email in server-side session for the OTP step
+            session["mfa_email"] = email
+            security_logs.insert_one({
+                "ip": ip_addr, "email": email,
+                "timestamp": datetime.datetime.utcnow(), "event": "otp_sent",
+            })
+            return redirect(url_for("verify_otp"))
         else:
-            # Log failed login
-            security_logs.insert_one({"ip": ip_addr, "email": email, "timestamp": datetime.datetime.utcnow(), "success": False})
-            # Safe generic error message (no information leakage)
+            # Log failed login attempt
+            security_logs.insert_one({
+                "ip": ip_addr, "email": email,
+                "timestamp": datetime.datetime.utcnow(), "event": "login_fail",
+            })
             return render_template("login.html", error="Invalid email or password. Please try again.")
 
     return render_template("login.html")
+
+
+@app.route("/verify-otp", methods=["GET", "POST"])
+def verify_otp():
+    email = session.get("mfa_email")
+    if not email:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        entered = "".join([
+            request.form.get(f"otp{i}", "").strip() for i in range(1, 7)
+        ])
+
+        record = otp_logs.find_one({"email": email})
+
+        # No OTP on record (expired or never issued)
+        if not record:
+            return render_template("otp.html", email=email, error="OTP expired. Please request a new one.")
+
+        # Too many wrong attempts
+        if record.get("attempts", 0) >= 3:
+            otp_logs.delete_many({"email": email})
+            session.pop("mfa_email", None)
+            return render_template("login.html", error="Too many incorrect OTP attempts. Please log in again.")
+
+        if record["otp_hash"] == hash_otp(entered):
+            # Correct OTP — consume it and issue JWT
+            otp_logs.delete_many({"email": email})
+            session.pop("mfa_email", None)
+
+            user = users.find_one({"email": email})
+            now  = datetime.datetime.utcnow()
+            users.update_one({"_id": user["_id"]}, {"$set": {"last_login": now}})
+            security_logs.insert_one({
+                "ip": request.remote_addr, "email": email,
+                "timestamp": now, "event": "login_success",
+            })
+
+            payload = {
+                "user_id": str(user["_id"]),
+                "email":   user["email"],
+                "exp":     now + datetime.timedelta(hours=1),
+            }
+            token = jwt.encode(payload, app.secret_key, algorithm="HS256")
+            resp  = make_response(redirect("/"))
+            resp.set_cookie("jwt_token", token, httponly=True, secure=True, samesite="Lax")
+            return resp
+        else:
+            # Increment attempt counter
+            otp_logs.update_one({"email": email}, {"$inc": {"attempts": 1}})
+            remaining = 3 - (record.get("attempts", 0) + 1)
+            return render_template("otp.html", email=email,
+                                   error=f"Incorrect code. {remaining} attempt(s) remaining.")
+
+    return render_template("otp.html", email=email)
+
+
+@app.route("/resend-otp", methods=["POST"])
+def resend_otp():
+    email = session.get("mfa_email")
+    if not email:
+        return redirect(url_for("login"))
+
+    otp  = generate_otp()
+    store_otp(email, otp)
+    sent = send_otp_email(email, otp)
+
+    if sent:
+        return render_template("otp.html", email=email, success="A new code has been sent to your email.")
+    return render_template("otp.html", email=email, error="Failed to resend. Please try again.")
 
 
 @app.route("/dashboard")
@@ -359,8 +490,9 @@ def advisor():
         }
         prediction = predictor.predict(form_data)
         if "error" in prediction:
-            flash(prediction["error"])
-            return redirect("/advisor")
+            return render_template("advisor.html", categories=categories, content_ratings=content_ratings,
+                                   prediction=None, ai_report=None, form_data=form_data,
+                                   error=prediction["error"])
 
         top_features = predictor.get_feature_importances()[:3]
 
@@ -396,8 +528,9 @@ def advisor():
             )
             ai_report = completion.choices[0].message.content
         except Exception as e:
-            flash(f"AI service error: {str(e)}")
-            return redirect("/advisor")
+            return render_template("advisor.html", categories=categories, content_ratings=content_ratings,
+                                   prediction=None, ai_report=None, form_data=form_data,
+                                   error=f"AI service error: {str(e)}")
 
         return render_template(
             "advisor.html",
