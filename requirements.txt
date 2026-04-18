@@ -4,6 +4,7 @@ dnspython
 werkzeug
 PyJWT
 xgboost
+lightgbm
 scikit-learn
 joblib
 numpy
