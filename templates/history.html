@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Activity History{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="/">Home</a><span>›</span>Activity History</div>
+<h1 style="font-size:1.375rem;font-weight:700;color:var(--text);margin:0 0 0.2rem;letter-spacing:-0.01em;">Activity History</h1>
+<p style="color:var(--muted);font-size:0.82rem;margin:0 0 1.75rem;">A log of your tool usage across App Success Analyzer.</p>
+
+{% if records %}
+<div class="card" style="padding:0;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
+        <span style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;">{{ records|length }} record{{ 's' if records|length != 1 }}</span>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;" id="filterBtns">
+            <button class="filter-btn active" data-filter="all" onclick="filterHistory('all',this)">All</button>
+            <button class="filter-btn" data-filter="blueprint" onclick="filterHistory('blueprint',this)">App Genesis</button>
+            <button class="filter-btn" data-filter="advisor" onclick="filterHistory('advisor',this)">AI Advisor</button>
+            <button class="filter-btn" data-filter="arena" onclick="filterHistory('arena',this)">Model Arena</button>
+            <button class="filter-btn" data-filter="dashboard" onclick="filterHistory('dashboard',this)">Dashboard</button>
+            <button class="filter-btn" data-filter="model_report" onclick="filterHistory('model_report',this)">Model Report</button>
+        </div>
+    </div>
+    <table class="history-table" id="historyTable">
+        <thead>
+            <tr>
+                <th>Tool</th>
+                <th>Summary</th>
+                <th>Date &amp; Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr data-tool="{{ r.tool }}">
+                <td>
+                    <span class="tool-badge tool-{{ r.tool }}">
+                        {% if r.tool == 'blueprint' %}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                        {% elif r.tool == 'advisor' %}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                        {% elif r.tool == 'arena' %}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        {% elif r.tool == 'dashboard' %}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        {% endif %}
+                        {{ r.tool_label }}
+                    </span>
+                </td>
+                <td class="history-summary">{{ r.summary if r.summary else '—' }}</td>
+                <td class="history-time">{{ r.timestamp.strftime('%b %d, %Y · %H:%M') if r.timestamp else '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem 1.5rem;">
+    <div style="font-size:2.5rem;margin-bottom:0.75rem;opacity:0.3;">📋</div>
+    <p style="color:var(--muted);font-size:0.875rem;margin:0;">No activity recorded yet. Start by using any tool — your history will appear here.</p>
+</div>
+{% endif %}
+
+<style>
+.history-table { width:100%; border-collapse:collapse; }
+.history-table thead { background:var(--surface-2); }
+.history-table th {
+    text-align:left;
+    font-size:0.68rem;
+    font-weight:700;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.07em;
+    padding:0.6rem 1.25rem;
+    border-bottom:1px solid var(--border);
+}
+.history-table td {
+    padding:0.7rem 1.25rem;
+    border-bottom:1px solid var(--border);
+    vertical-align:middle;
+}
+.history-table tbody tr:last-child td { border-bottom:none; }
+.history-table tbody tr:hover { background:var(--surface-2); }
+
+.tool-badge {
+    display:inline-flex;
+    align-items:center;
+    gap:0.35rem;
+    font-size:0.72rem;
+    font-weight:600;
+    padding:0.2rem 0.55rem;
+    border-radius:99px;
+}
+.tool-blueprint { background:rgba(99,102,241,0.12); color:#a5b4fc; }
+.tool-advisor   { background:rgba(20,184,166,0.12); color:#5eead4; }
+.tool-arena     { background:rgba(245,158,11,0.12); color:#fcd34d; }
+.tool-dashboard { background:rgba(59,130,246,0.12); color:#93c5fd; }
+.tool-model_report { background:rgba(239,68,68,0.12); color:#fca5a5; }
+
+.history-summary {
+    font-size:0.78rem;
+    color:var(--muted);
+    max-width:380px;
+}
+.history-time {
+    font-size:0.72rem;
+    color:var(--muted-2);
+    white-space:nowrap;
+}
+.filter-btn {
+    font-size:0.7rem;
+    font-weight:500;
+    padding:0.2rem 0.55rem;
+    border-radius:99px;
+    border:1px solid var(--border);
+    background:transparent;
+    color:var(--muted);
+    cursor:pointer;
+    transition:background 0.12s, color 0.12s;
+}
+.filter-btn:hover, .filter-btn.active {
+    background:var(--surface-3);
+    color:var(--text-2);
+    border-color:var(--border-light);
+}
+</style>
+
+<script>
+function filterHistory(tool, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#historyTable tbody tr').forEach(row => {
+        row.style.display = (tool === 'all' || row.dataset.tool === tool) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

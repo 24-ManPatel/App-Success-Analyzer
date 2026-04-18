@@ -15,20 +15,53 @@
     <nav class="navbar">
         <a href="/" class="navbar-brand">App Success Analyzer</a>
         <div class="navbar-links">
-            {% if request.cookies.get('jwt_token') %}
+            {% if current_user %}
                 <a href="/"            class="nav-link {{ 'active' if request.path == '/' }}">Home</a>
                 <a href="/dashboard"   class="nav-link {{ 'active' if request.path == '/dashboard' }}">Dashboard</a>
-                <a href="/blueprint"   class="nav-link {{ 'active' if request.path == '/blueprint' }}">App Blueprint</a>
+                <a href="/blueprint"   class="nav-link {{ 'active' if request.path == '/blueprint' }}">App Genesis</a>
                 <a href="/arena"       class="nav-link {{ 'active' if request.path == '/arena' }}">Model Arena</a>
                 <a href="/advisor"     class="nav-link {{ 'active' if request.path == '/advisor' }}">AI Advisor</a>
                 <a href="/model-report" class="nav-link {{ 'active' if request.path == '/model-report' }}">Model Report</a>
-                <a href="/logout"      class="nav-link danger">Logout</a>
+                <div class="account-menu">
+                    <button class="account-btn" onclick="toggleAccountMenu(event)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span>{{ current_user.name }}</span>
+                        <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="account-dropdown" id="accountDropdown">
+                        <div class="account-dropdown-header">
+                            <div class="account-name">{{ current_user.name }}</div>
+                            <div class="account-email">{{ current_user.email }}</div>
+                        </div>
+                        <div class="account-dropdown-divider"></div>
+                        <a href="/history" class="account-dropdown-item {{ 'active' if request.path == '/history' }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Activity History
+                        </a>
+                        <div class="account-dropdown-divider"></div>
+                        <a href="/logout" class="account-dropdown-item danger">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            Logout
+                        </a>
+                    </div>
+                </div>
             {% else %}
                 <a href="/login"    class="nav-link {{ 'active' if request.path == '/login' }}">Login</a>
                 <a href="/register" class="nav-link {{ 'active' if request.path == '/register' }}">Register</a>
             {% endif %}
         </div>
     </nav>
+    <script>
+    function toggleAccountMenu(e) {
+        e.stopPropagation();
+        const dropdown = document.getElementById('accountDropdown');
+        dropdown.classList.toggle('open');
+    }
+    document.addEventListener('click', function() {
+        const dropdown = document.getElementById('accountDropdown');
+        if (dropdown) dropdown.classList.remove('open');
+    });
+    </script>
 
     <div class="page-content">
         {% with messages = get_flashed_messages() %}

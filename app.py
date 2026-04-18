@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, redirect, session, make_response, jsonify, url_for, flash
-from pymongo import MongoClient
+from flask import Flask, render_template, request, redirect, session, make_response, jsonify, url_for, flash, g
+from pymongo import MongoClient, DESCENDING
 from werkzeug.security import generate_password_hash, check_password_hash
+from bson import ObjectId
 import config
 import jwt
 import datetime
@@ -50,9 +51,11 @@ db = client[config.DB_NAME]
 users         = db.users
 security_logs = db.security_logs
 otp_logs      = db.otp_logs          # MFA: stores hashed OTPs
+user_history  = db.user_history      # per-user activity history
 
 users.create_index("email", unique=True)
 otp_logs.create_index("expires_at", expireAfterSeconds=0)  # TTL — auto-deletes expired OTPs
+user_history.create_index("user_id")
 
 
 # ── MFA helpers ─────────────────────────────────────────────────────────────────
@@ -118,16 +121,37 @@ def token_required(f):
         if not token:
             return redirect("/login")
         try:
-            # Decode JWT
             data = jwt.decode(token, app.secret_key, algorithms=["HS256"])
-            # Optionally attach user info to request here if needed
-            # e.g., request.user_id = data['user_id']
+            g.current_user = {
+                "user_id": data["user_id"],
+                "email":   data["email"],
+                "name":    data.get("name", data["email"].split("@")[0]),
+            }
         except jwt.ExpiredSignatureError:
             return redirect("/login")
         except jwt.InvalidTokenError:
             return redirect("/login")
         return f(*args, **kwargs)
     return decorated
+
+
+@app.context_processor
+def inject_current_user():
+    return {"current_user": getattr(g, "current_user", None)}
+
+
+def log_activity(tool: str, tool_label: str, summary: str = "") -> None:
+    """Record a user tool usage in user_history collection."""
+    user = getattr(g, "current_user", None)
+    if not user:
+        return
+    user_history.insert_one({
+        "user_id":    ObjectId(user["user_id"]),
+        "tool":       tool,
+        "tool_label": tool_label,
+        "summary":    summary[:200],
+        "timestamp":  datetime.datetime.utcnow(),
+    })
 
 
 @app.route("/")
@@ -270,6 +294,7 @@ def verify_otp():
             payload = {
                 "user_id": str(user["_id"]),
                 "email":   user["email"],
+                "name":    user.get("name", user["email"].split("@")[0]),
                 "exp":     now + datetime.timedelta(hours=1),
             }
             token = jwt.encode(payload, app.secret_key, algorithm="HS256")
@@ -304,6 +329,7 @@ def resend_otp():
 @app.route("/dashboard")
 @token_required
 def dashboard():
+    log_activity("dashboard", "Dashboard")
     return render_template("dashboard.html")
 
 
@@ -425,6 +451,7 @@ def api_blueprint():
             max_tokens=1100,
         )
 
+        log_activity("blueprint", "App Genesis", idea[:150])
         return jsonify({
             "extracted":   extracted,
             "predictions": predictions,
@@ -460,6 +487,7 @@ def api_predict_all():
 @app.route("/arena")
 @token_required
 def arena():
+    log_activity("arena", "Model Arena")
     categories      = sorted(predictor.category_map.keys())
     content_ratings = sorted(predictor.content_rating_map.keys())
     return render_template(
@@ -532,6 +560,10 @@ def advisor():
                                    prediction=None, ai_report=None, form_data=form_data,
                                    error=f"AI service error: {str(e)}")
 
+        log_activity(
+            "advisor", "AI Advisor",
+            f"Category: {form_data['category']} | Prediction: {prediction['label']} ({prediction['confidence']:.1f}%)"
+        )
         return render_template(
             "advisor.html",
             categories=categories,
@@ -554,6 +586,7 @@ def advisor():
 @app.route("/model-report")
 @token_required
 def model_report():
+    log_activity("model_report", "Model Report")
     all_fi         = predictor.get_all_feature_importances()
     category_count = len(predictor.category_map)
     genre_count    = len(predictor.primary_genre_map)
@@ -567,6 +600,21 @@ def model_report():
         genre_count=genre_count,
         rating_count=rating_count,
     )
+
+
+@app.route("/history")
+@token_required
+def history():
+    user_id = ObjectId(g.current_user["user_id"])
+    records = list(
+        user_history.find({"user_id": user_id})
+        .sort("timestamp", DESCENDING)
+        .limit(200)
+    )
+    for r in records:
+        r["_id"]     = str(r["_id"])
+        r["user_id"] = str(r["user_id"])
+    return render_template("history.html", records=records)
 
 
 if __name__ == "__main__":
