@@ -602,6 +602,8 @@ def model_report():
     )
 
 
+_IST = datetime.timedelta(hours=5, minutes=30)
+
 @app.route("/history")
 @token_required
 def history():
@@ -614,7 +616,17 @@ def history():
     for r in records:
         r["_id"]     = str(r["_id"])
         r["user_id"] = str(r["user_id"])
+        if r.get("timestamp"):
+            r["timestamp"] = r["timestamp"] + _IST
     return render_template("history.html", records=records)
+
+
+@app.route("/history/clear", methods=["POST"])
+@token_required
+def history_clear():
+    user_id = ObjectId(g.current_user["user_id"])
+    user_history.delete_many({"user_id": user_id})
+    return redirect("/history")
 
 
 if __name__ == "__main__":

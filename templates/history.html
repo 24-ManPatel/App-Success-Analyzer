@@ -3,12 +3,13 @@
 {% block content %}
 <div class="breadcrumb"><a href="/">Home</a><span>›</span>Activity History</div>
 <h1 style="font-size:1.375rem;font-weight:700;color:var(--text);margin:0 0 0.2rem;letter-spacing:-0.01em;">Activity History</h1>
-<p style="color:var(--muted);font-size:0.82rem;margin:0 0 1.75rem;">A log of your tool usage across App Success Analyzer.</p>
+<p style="color:var(--muted);font-size:0.82rem;margin:0 0 1.75rem;">A log of your tool usage across App Success Analyzer. Times shown in IST.</p>
 
 {% if records %}
 <div class="card" style="padding:0;overflow:hidden;">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;padding:1rem 1.25rem;border-bottom:1px solid var(--border);">
         <span style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;">{{ records|length }} record{{ 's' if records|length != 1 }}</span>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;" id="filterBtns">
             <button class="filter-btn active" data-filter="all" onclick="filterHistory('all',this)">All</button>
             <button class="filter-btn" data-filter="blueprint" onclick="filterHistory('blueprint',this)">App Genesis</button>
@@ -17,13 +18,17 @@
             <button class="filter-btn" data-filter="dashboard" onclick="filterHistory('dashboard',this)">Dashboard</button>
             <button class="filter-btn" data-filter="model_report" onclick="filterHistory('model_report',this)">Model Report</button>
         </div>
+        <form method="POST" action="/history/clear" onsubmit="return confirm('Clear all activity history? This cannot be undone.')">
+            <button type="submit" style="font-size:0.7rem;font-weight:500;padding:0.22rem 0.65rem;border-radius:99px;border:1px solid rgba(248,81,73,0.35);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.12s;" onmouseover="this.style.color='#ff7b72';this.style.background='rgba(248,81,73,0.08)'" onmouseout="this.style.color='var(--muted)';this.style.background='transparent'">Clear All</button>
+        </form>
+        </div>
     </div>
     <table class="history-table" id="historyTable">
         <thead>
             <tr>
                 <th>Tool</th>
                 <th>Summary</th>
-                <th>Date &amp; Time</th>
+                <th>Date &amp; Time (IST)</th>
             </tr>
         </thead>
         <tbody>
