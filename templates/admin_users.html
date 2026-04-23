@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — Users{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="breadcrumb"><a href="/">Home</a><span>›</span>Admin<span>›</span>Users</div>
+    <h1>User Management</h1>
+    <p>Manage user roles, display names, and account access.</p>
+</div>
+
+<!-- Flash-style banner (shown via JS after an action) -->
+<div id="action-banner" style="display:none; margin-bottom:1rem;"
+     class="flash-msg" style="border-left-color:var(--success); color:#3fb950; background:rgba(63,185,80,0.06);"></div>
+
+<div class="card" style="padding:0; overflow:hidden;">
+    <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <span style="font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted);">
+            All Users &nbsp;<span style="color:var(--muted-2); font-weight:400;">({{ users | length }})</span>
+        </span>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table class="data-table" style="padding:0;">
+            <thead>
+                <tr>
+                    <th style="padding-left:1.25rem;">Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Change Role</th>
+                    <th style="text-align:right; padding-right:1.25rem;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                {% set uid = user._id | string %}
+                {% set is_self = (uid == current_user_id) %}
+                <tr id="row-{{ uid }}">
+                    <!-- Name cell — shows editable field inline -->
+                    <td style="padding-left:1.25rem; font-weight:600; color:var(--text);">
+                        <span id="name-display-{{ uid }}">{{ user.name }}</span>
+                    </td>
+
+                    <td style="color:var(--muted);">{{ user.email }}</td>
+
+                    <!-- Role badge -->
+                    <td>
+                        {% if user.role == 'admin' %}
+                            <span style="display:inline-block; padding:2px 10px; border-radius:4px; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; background:rgba(88,166,255,0.12); color:#58a6ff; border:1px solid rgba(88,166,255,0.3);">Admin</span>
+                        {% else %}
+                            <span style="display:inline-block; padding:2px 10px; border-radius:4px; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; background:var(--surface-2); color:var(--muted); border:1px solid var(--border);">User</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Role change form -->
+                    <td>
+                        {% if not is_self %}
+                        <form method="POST" action="/admin/users" style="display:flex; align-items:center; gap:0.5rem;">
+                            <input type="hidden" name="user_id" value="{{ uid }}">
+                            <select name="role" style="background:var(--surface-2); border:1px solid var(--border-light); border-radius:var(--radius-sm); padding:0.35rem 0.6rem; color:var(--text); font-family:inherit; font-size:0.775rem; outline:none; cursor:pointer; transition:border-color 0.15s;">
+                                <option value="user"  {% if user.role == 'user'  %}selected{% endif %}>User</option>
+                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                            </select>
+                            <button type="submit" class="btn-primary" style="padding:0.35rem 0.75rem; font-size:0.72rem;">
+                                Save
+                            </button>
+                        </form>
+                        {% else %}
+                            <span style="font-size:0.75rem; color:var(--muted-2); font-style:italic;">You</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Rename + Delete actions -->
+                    <td style="text-align:right; padding-right:1.25rem;">
+                        <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.4rem;">
+                            <!-- Rename button -->
+                            <button type="button"
+                                    class="btn-secondary"
+                                    style="padding:0.32rem 0.65rem; font-size:0.72rem;"
+                                    onclick="openRenameModal('{{ uid }}', '{{ user.name | replace("'", "\\'") }}')">
+                                ✏ Rename
+                            </button>
+
+                            <!-- Delete button (hidden for self) -->
+                            {% if not is_self %}
+                            <button type="button"
+                                    class="btn-secondary danger"
+                                    style="padding:0.32rem 0.65rem; font-size:0.72rem;"
+                                    onclick="openDeleteModal('{{ uid }}', '{{ user.name | replace("'", "\\'") }}')">
+                                ✕ Delete
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="padding:2rem 1.25rem; text-align:center; color:var(--muted);">No users found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     RENAME MODAL
+     ═══════════════════════════════════════════════════════ -->
+<div id="rename-overlay" onclick="closeModals(event, this)"
+     style="display:none; position:fixed; inset:0; background:rgba(1,4,9,0.72); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:var(--surface); border:1px solid var(--border-light); border-top:2px solid #58a6ff;
+                border-radius:var(--radius-lg); padding:2rem; width:100%; max-width:420px; box-shadow:var(--shadow-lg);"
+         onclick="event.stopPropagation()">
+        <div style="margin-bottom:1.25rem;">
+            <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#58a6ff; margin-bottom:0.3rem;">User Management</div>
+            <h2 style="margin:0; font-size:1.1rem; font-weight:700; color:var(--text);">Rename User</h2>
+            <p style="margin:0.3rem 0 0; font-size:0.78rem; color:var(--muted);">Enter the new display name for <strong id="rename-target-label" style="color:var(--text-2);"></strong>.</p>
+        </div>
+
+        <form id="rename-form" method="POST" action="/admin/users/rename">
+            <input type="hidden" id="rename-user-id" name="user_id" value="">
+            <div class="form-group">
+                <label for="rename-new-name">New Name</label>
+                <input type="text" id="rename-new-name" name="new_name" placeholder="Full name" autocomplete="off" required>
+            </div>
+            <div style="display:flex; gap:0.6rem; margin-top:1.25rem;">
+                <button type="submit" class="btn-primary" style="flex:1;">Save Name</button>
+                <button type="button" class="btn-secondary" style="flex:1;" onclick="closeRenameModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     DELETE CONFIRM MODAL
+     ═══════════════════════════════════════════════════════ -->
+<div id="delete-overlay" onclick="closeModals(event, this)"
+     style="display:none; position:fixed; inset:0; background:rgba(1,4,9,0.72); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:var(--surface); border:1px solid var(--border-light); border-top:2px solid var(--danger);
+                border-radius:var(--radius-lg); padding:2rem; width:100%; max-width:400px; box-shadow:var(--shadow-lg);"
+         onclick="event.stopPropagation()">
+        <div style="margin-bottom:1.25rem;">
+            <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--danger); margin-bottom:0.3rem;">Danger Zone</div>
+            <h2 style="margin:0; font-size:1.1rem; font-weight:700; color:var(--text);">Delete User</h2>
+            <p style="margin:0.4rem 0 0; font-size:0.82rem; color:var(--muted); line-height:1.6;">
+                This will permanently delete
+                <strong id="delete-target-label" style="color:#ff7b72;"></strong>
+                and all their data. <strong style="color:var(--text-2);">This cannot be undone.</strong>
+            </p>
+        </div>
+
+        <form id="delete-form" method="POST" action="/admin/users/delete">
+            <input type="hidden" id="delete-user-id" name="user_id" value="">
+            <div style="display:flex; gap:0.6rem; margin-top:1.25rem;">
+                <button type="submit" class="btn-secondary danger" style="flex:1; justify-content:center;">
+                    ✕ Delete Permanently
+                </button>
+                <button type="button" class="btn-primary" style="flex:1;" onclick="closeDeleteModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<script>
+// ── Modal helpers ─────────────────────────────────────────────
+function openRenameModal(uid, currentName) {
+    document.getElementById('rename-user-id').value   = uid;
+    document.getElementById('rename-new-name').value  = currentName;
+    document.getElementById('rename-target-label').textContent = currentName;
+    const overlay = document.getElementById('rename-overlay');
+    overlay.style.display = 'flex';
+    // Small delay so the transition feels smooth
+    requestAnimationFrame(() => overlay.style.opacity = '1');
+    setTimeout(() => document.getElementById('rename-new-name').focus(), 50);
+}
+
+function closeRenameModal() {
+    document.getElementById('rename-overlay').style.display = 'none';
+}
+
+function openDeleteModal(uid, name) {
+    document.getElementById('delete-user-id').value     = uid;
+    document.getElementById('delete-target-label').textContent = name;
+    const overlay = document.getElementById('delete-overlay');
+    overlay.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-overlay').style.display = 'none';
+}
+
+// Click outside overlay to close
+function closeModals(event, overlay) {
+    if (event.target === overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// Escape key closes any open modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeRenameModal();
+        closeDeleteModal();
+    }
+});
+</script>
+{% endblock %}

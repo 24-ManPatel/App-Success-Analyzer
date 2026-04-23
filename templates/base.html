@@ -22,6 +22,9 @@
                 <a href="/arena"       class="nav-link {{ 'active' if request.path == '/arena' }}">Model Arena</a>
                 <a href="/advisor"     class="nav-link {{ 'active' if request.path == '/advisor' }}">AI Advisor</a>
                 <a href="/model-report" class="nav-link {{ 'active' if request.path == '/model-report' }}">Model Report</a>
+                {% if g.get('user_role') == 'admin' %}
+                    <a href="/admin/users" class="nav-link {{ 'active' if request.path == '/admin/users' }}">Admin Users</a>
+                {% endif %}
                 <a href="/logout"      class="nav-link danger">Logout</a>
             {% else %}
                 <a href="/login"    class="nav-link {{ 'active' if request.path == '/login' }}">Login</a>

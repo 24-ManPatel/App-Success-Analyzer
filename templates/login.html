@@ -20,8 +20,16 @@
                 <input type="email" name="email" id="email" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" name="password" id="password" placeholder="Enter your password" required>
+                <div class="flex justify-between items-center mb-1">
+                    <label for="password" style="margin-bottom:0;">Password</label>
+                    <a href="/forgot-password" class="text-xs text-indigo-600 hover:text-indigo-500">Forgot Password?</a>
+                </div>
+                <div class="relative">
+                    <input type="password" name="password" id="password" placeholder="Enter your password" required class="w-full pr-10">
+                    <button type="button" onclick="togglePassword('password', this)" class="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5 text-gray-500 hover:text-gray-700">
+                        Show
+                    </button>
+                </div>
             </div>
             <button type="submit" class="btn-primary full" style="margin-top:0.5rem;">Sign In</button>
         </form>
@@ -31,4 +39,16 @@
         </div>
     </div>
 </div>
+<script>
+function togglePassword(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = 'Hide';
+    } else {
+        input.type = 'password';
+        btn.textContent = 'Show';
+    }
+}
+</script>
 {% endblock %}

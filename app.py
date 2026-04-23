@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, make_response, jsonify, url_for, flash
+from flask import Flask, render_template, request, redirect, session, make_response, jsonify, url_for, flash, g
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import config
@@ -14,6 +14,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import predictor
 from openai import OpenAI
+from bson.objectid import ObjectId
 
 load_dotenv()
 
@@ -120,14 +121,35 @@ def token_required(f):
         try:
             # Decode JWT
             data = jwt.decode(token, app.secret_key, algorithms=["HS256"])
-            # Optionally attach user info to request here if needed
-            # e.g., request.user_id = data['user_id']
+            # Attach user info to request
+            request.user_id = data.get('user_id')
+            request.role = data.get('role', 'user')
+            g.user_role = request.role
         except jwt.ExpiredSignatureError:
             return redirect("/login")
         except jwt.InvalidTokenError:
             return redirect("/login")
         return f(*args, **kwargs)
     return decorated
+
+
+def role_required(*roles):
+    """RBAC decorator. Protects routes based on user role."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            token = request.cookies.get("jwt_token")
+            if not token:
+                return redirect("/login")
+            try:
+                data = jwt.decode(token, app.secret_key, algorithms=["HS256"])
+                if data.get("role", "user") not in roles:
+                    return make_response("Access Denied: Insufficient permissions.", 403)
+            except Exception:
+                return redirect("/login")
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
 
 
 @app.route("/")
@@ -190,21 +212,33 @@ def login():
             return render_template("login.html", error="Email and password are required.")
 
         ip_addr = request.remote_addr
+        user = users.find_one({"email": email})
 
-        # Brute-force protection: check failed attempts in last 15 mins
-        fifteen_mins_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+        now = datetime.datetime.utcnow()
+
+        # Step 1: Account Lockout Check
+        if user and user.get("lock_until") and user["lock_until"] > now:
+            return render_template("login.html", error="Account is temporarily locked. Try again later.")
+
+        # Secondary IP-level rate limit — guards against distributed/enumeration attacks.
+        # NOTE: This is intentionally a HIGHER threshold than the per-account lockout (5).
+        # Per-account lockout already handles single-account brute-force; this catch-all
+        # only fires when the same IP hammers many different accounts in a short window.
+        fifteen_mins_ago = now - datetime.timedelta(minutes=15)
         recent_failures = security_logs.count_documents({
             "ip":        ip_addr,
             "timestamp": {"$gt": fifteen_mins_ago},
             "event":     "login_fail",
         })
 
-        if recent_failures >= 5:
-            return render_template("login.html", error="Too many failed login attempts. Please try again later.")
+        if recent_failures >= 15:
+            return render_template("login.html", error="Too many failed login attempts from this device. Please try again later.")
 
-        user = users.find_one({"email": email})
-
+        # Step 2: Validate Credentials
         if user and check_password_hash(user["password"], password):
+            # Login succeeds: reset failed attempts
+            users.update_one({"_id": user["_id"]}, {"$set": {"failed_attempts": 0, "lock_until": None}})
+            
             # Credentials correct — start MFA flow
             otp = generate_otp()
             store_otp(email, otp)
@@ -221,11 +255,25 @@ def login():
             })
             return redirect(url_for("verify_otp"))
         else:
+            now = datetime.datetime.utcnow()
             # Log failed login attempt
             security_logs.insert_one({
                 "ip": ip_addr, "email": email,
-                "timestamp": datetime.datetime.utcnow(), "event": "login_fail",
+                "timestamp": now, "event": "login_fail",
             })
+            
+            # Step 3: Increment lockout attempts
+            if user:
+                failed = user.get("failed_attempts", 0) + 1
+                updates = {"failed_attempts": failed}
+                if failed >= 5:
+                    updates["lock_until"] = now + datetime.timedelta(minutes=15)
+                    security_logs.insert_one({
+                        "ip": ip_addr, "email": email,
+                        "timestamp": now, "event": "account_lock",
+                    })
+                users.update_one({"_id": user["_id"]}, {"$set": updates})
+
             return render_template("login.html", error="Invalid email or password. Please try again.")
 
     return render_template("login.html")
@@ -261,7 +309,7 @@ def verify_otp():
 
             user = users.find_one({"email": email})
             now  = datetime.datetime.utcnow()
-            users.update_one({"_id": user["_id"]}, {"$set": {"last_login": now}})
+            users.update_one({"_id": user["_id"]}, {"$set": {"last_login": now, "failed_attempts": 0, "lock_until": None}})
             security_logs.insert_one({
                 "ip": request.remote_addr, "email": email,
                 "timestamp": now, "event": "login_success",
@@ -270,6 +318,7 @@ def verify_otp():
             payload = {
                 "user_id": str(user["_id"]),
                 "email":   user["email"],
+                "role":    user.get("role", "user"),
                 "exp":     now + datetime.timedelta(hours=1),
             }
             token = jwt.encode(payload, app.secret_key, algorithm="HS256")
@@ -301,10 +350,158 @@ def resend_otp():
     return render_template("otp.html", email=email, error="Failed to resend. Please try again.")
 
 
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        if not email:
+            return render_template("forgot_password.html", error="Email is required.")
+        
+        user = users.find_one({"email": email})
+        if user:
+            otp = generate_otp()
+            store_otp(email, otp)
+            send_otp_email(email, otp)
+            session["reset_email"] = email
+            return redirect(url_for("verify_reset_otp"))
+        else:
+            # Do NOT reveal whether email exists for security (return generic message if not found).
+            # But the flow usually goes: if exists, send email. For UX here we can bounce them to verify page
+            # To be thoroughly secure against enumeration, we fake the OTP process.
+            session["reset_email"] = email
+            return redirect(url_for("verify_reset_otp"))
+            
+    return render_template("forgot_password.html")
+
+
+@app.route("/verify-reset-otp", methods=["GET", "POST"])
+def verify_reset_otp():
+    email = session.get("reset_email")
+    if not email:
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        entered = "".join([
+            request.form.get(f"otp{i}", "").strip() for i in range(1, 7)
+        ])
+
+        record = otp_logs.find_one({"email": email})
+
+        if not record:
+            return render_template("verify_reset_otp.html", email=email, error="OTP expired. Please request a new one.")
+
+        if record.get("attempts", 0) >= 3:
+            otp_logs.delete_many({"email": email})
+            session.pop("reset_email", None)
+            return render_template("forgot_password.html", error="Too many incorrect attempts. Please try again.")
+
+        if record["otp_hash"] == hash_otp(entered):
+            otp_logs.delete_many({"email": email})
+            session["reset_authorized"] = True
+            return redirect(url_for("reset_password"))
+        else:
+            otp_logs.update_one({"email": email}, {"$inc": {"attempts": 1}})
+            remaining = 3 - (record.get("attempts", 0) + 1)
+            return render_template("verify_reset_otp.html", email=email,
+                                   error=f"Incorrect code. {remaining} attempt(s) remaining.")
+
+    return render_template("verify_reset_otp.html", email=email)
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    if not session.get("reset_authorized"):
+        return redirect(url_for("login"))
+    
+    email = session.get("reset_email")
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+
+        password_pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$"
+        
+        if password != confirm:
+            return render_template("reset_password.html", error="Passwords do not match.")
+        
+        if not re.match(password_pattern, password):
+            return render_template("reset_password.html", error="Password does not meet the complexity requirements.")
+
+        hashed_password = generate_password_hash(password)
+        users.update_one({"email": email}, {"$set": {"password": hashed_password}})
+        
+        session.pop("reset_authorized", None)
+        session.pop("reset_email", None)
+        
+        return redirect(url_for("login"))
+        
+    return render_template("reset_password.html")
+
+
 @app.route("/dashboard")
 @token_required
 def dashboard():
     return render_template("dashboard.html")
+
+
+@app.route("/admin/users", methods=["GET", "POST"])
+@token_required
+@role_required("admin")
+def admin_users():
+    if request.method == "POST":
+        user_id = request.form.get("user_id")
+        new_role = request.form.get("role")
+        if user_id and new_role in ["user", "admin"]:
+            users.update_one({"_id": ObjectId(user_id)}, {"$set": {"role": new_role}})
+        return redirect("/admin/users")
+
+    all_users = list(users.find())
+    # Decode current user's ID from JWT so the template can prevent self-actions
+    token = request.cookies.get("jwt_token")
+    current_user_id = ""
+    try:
+        data = jwt.decode(token, app.secret_key, algorithms=["HS256"])
+        current_user_id = data.get("user_id", "")
+    except Exception:
+        pass
+    return render_template("admin_users.html", users=all_users, current_user_id=current_user_id)
+
+
+@app.route("/admin/users/delete", methods=["POST"])
+@token_required
+@role_required("admin")
+def admin_delete_user():
+    """Admin: permanently delete a user account (cannot delete self)."""
+    user_id = request.form.get("user_id", "").strip()
+    # Resolve current admin's ID from JWT
+    token = request.cookies.get("jwt_token")
+    try:
+        data = jwt.decode(token, app.secret_key, algorithms=["HS256"])
+        current_user_id = data.get("user_id", "")
+    except Exception:
+        return redirect("/admin/users")
+
+    if not user_id:
+        return redirect("/admin/users")
+    if user_id == current_user_id:
+        # Prevent self-deletion
+        return redirect("/admin/users")
+
+    users.delete_one({"_id": ObjectId(user_id)})
+    return redirect("/admin/users")
+
+
+@app.route("/admin/users/rename", methods=["POST"])
+@token_required
+@role_required("admin")
+def admin_rename_user():
+    """Admin: change another user's display name."""
+    user_id  = request.form.get("user_id", "").strip()
+    new_name = request.form.get("new_name", "").strip()
+
+    if user_id and new_name:
+        users.update_one({"_id": ObjectId(user_id)}, {"$set": {"name": new_name}})
+    return redirect("/admin/users")
 
 
 @app.route("/logout")
